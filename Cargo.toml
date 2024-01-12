@@ -1,0 +1,14 @@
+[package]
+name = "voxei"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+ash = { git = "https://github.com/ash-rs/ash", branch = "rwh-0.6" }
+ash-window = { git = "https://github.com/ash-rs/ash", branch = "rwh-0.6" }
+downcast = "0.11.0"
+parking_lot = "0.12.1"
+raw-window-handle = "0.6.0"
+slotmap = "1.0.7"
+voxei-macros = { path = "./macros" }
+winit = "0.29.4"
