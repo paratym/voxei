@@ -5,6 +5,7 @@ use crate::engine::window::window::{Window, WindowConfig};
 use crate::game::app::App;
 
 use crate::game::graphics::queues::DefaultQueueExecutor;
+use crate::game::graphics::render_manager::{self, FrameIndex, RenderManager};
 use crate::{
     constants,
     engine::graphics::vulkan::{
@@ -55,8 +56,13 @@ pub fn setup_graphical_resources(app: &mut App) {
 
     let default_queue_executor = DefaultQueueExecutor::new(&vulkan);
 
+    let frame_index = FrameIndex::new();
+    let render_manager = RenderManager::new(&vulkan);
+
     app.resource_bank_mut().insert(window);
     app.resource_bank_mut().insert(vulkan);
     app.resource_bank_mut().insert(swapchain);
     app.resource_bank_mut().insert(default_queue_executor);
+    app.resource_bank_mut().insert(frame_index);
+    app.resource_bank_mut().insert(render_manager);
 }

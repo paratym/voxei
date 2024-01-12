@@ -21,3 +21,17 @@ impl DefaultQueueExecutor {
         &self.executor
     }
 }
+
+impl std::ops::Deref for DefaultQueueExecutor {
+    type Target = QueueExecutor<{ constants::FRAMES_IN_FLIGHT }>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.executor
+    }
+}
+
+impl std::ops::DerefMut for DefaultQueueExecutor {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.executor
+    }
+}

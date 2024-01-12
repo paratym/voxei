@@ -27,7 +27,13 @@ impl ResourceBank {
 
     pub fn get_resource<R: Resource>(&self) -> Res<R> {
         RwLockReadGuard::map(
-            self.resources.get(&TypeId::of::<R>()).unwrap().read(),
+            self.resources
+                .get(&TypeId::of::<R>())
+                .expect(&format!(
+                    "Failed to get resource: {}",
+                    std::any::type_name::<R>()
+                ))
+                .read(),
             |r| r.downcast_ref().unwrap(),
         )
     }
@@ -37,7 +43,13 @@ impl ResourceBank {
         R: Resource,
     {
         RwLockWriteGuard::map(
-            self.resources.get(&TypeId::of::<R>()).unwrap().write(),
+            self.resources
+                .get(&TypeId::of::<R>())
+                .expect(&format!(
+                    "Failed to get resource: {}",
+                    std::any::type_name::<R>()
+                ))
+                .write(),
             |r| r.downcast_mut().unwrap(),
         )
     }

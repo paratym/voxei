@@ -3,6 +3,8 @@ use winit::event_loop::EventLoop;
 use crate::engine::resource::ResourceBank;
 use winit::event::{Event as WinitEvent, WindowEvent as WinitWindowEvent};
 
+use super::game_loop::game_loop;
+
 pub struct App {
     event_loop: Option<EventLoop<()>>,
     resource_bank: ResourceBank,
@@ -39,9 +41,7 @@ impl App {
                         WinitWindowEvent::CloseRequested => {
                             window.exit();
                         }
-                        WinitWindowEvent::RedrawRequested => {
-                            todo!("Redraw requested");
-                        }
+                        WinitWindowEvent::RedrawRequested => game_loop(&mut self),
                         _ => {}
                     },
                     _ => {}
