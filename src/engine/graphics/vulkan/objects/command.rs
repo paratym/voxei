@@ -9,8 +9,9 @@ use crate::engine::graphics::vulkan::{
     vulkan::{Vulkan, VulkanDep},
 };
 
-use super::{Image, ImageMemoryBarrier};
 use crate::engine::graphics::vulkan::util::VulkanResourceDep;
+
+use super::image::{Image, ImageMemoryBarrier};
 
 new_key_type! { pub struct CommandBufferHandle; }
 
@@ -43,6 +44,20 @@ impl CommandBuffer {
                 .device()
                 .end_command_buffer(self.command_buffer)
                 .expect("Failed to end command buffer");
+        }
+    }
+
+    pub fn blit_image(&mut self, info: util::BlitImageInfo) {
+        unsafe {
+            self.vulkan_dep.device().cmd_blit_image(
+                self.command_buffer,
+                info.src_image.instance().image(),
+                info.src_image_layout,
+                info.dst_image.instance().image(),
+                info.dst_image_layout,
+                &[vk::ImageBlit::from(&info)],
+                info.scaling,
+            );
         }
     }
 
@@ -221,5 +236,70 @@ impl CommandPool {
                 N
             )
         })
+    }
+}
+
+pub mod util {
+    use super::*;
+
+    pub struct BlitImageInfo<'a> {
+        pub src_image: &'a dyn Image,
+        pub src_image_layout: vk::ImageLayout,
+        pub dst_image: &'a dyn Image,
+        pub dst_image_layout: vk::ImageLayout,
+        pub src_subresource: vk::ImageSubresourceLayers,
+        pub dst_subresource: vk::ImageSubresourceLayers,
+        pub src_offset: vk::Offset3D,
+        pub dst_offset: vk::Offset3D,
+        pub src_extent: vk::Extent3D,
+        pub dst_extent: vk::Extent3D,
+        pub scaling: vk::Filter,
+    }
+
+    impl<'a> From<&BlitImageInfo<'a>> for vk::ImageBlit {
+        fn from(info: &BlitImageInfo<'a>) -> Self {
+            vk::ImageBlit::default()
+                .src_subresource(info.src_subresource)
+                .src_offsets([
+                    info.src_offset,
+                    vk::Offset3D {
+                        x: info.src_offset.x + info.src_extent.width as i32,
+                        y: info.src_offset.y + info.src_extent.height as i32,
+                        z: info.src_offset.z + info.src_extent.depth as i32,
+                    },
+                ])
+                .dst_subresource(info.dst_subresource)
+                .dst_offsets([
+                    info.dst_offset,
+                    vk::Offset3D {
+                        x: info.dst_offset.x + info.dst_extent.width as i32,
+                        y: info.dst_offset.y + info.dst_extent.height as i32,
+                        z: info.dst_offset.z + info.dst_extent.depth as i32,
+                    },
+                ])
+        }
+    }
+
+    impl BlitImageInfo<'_> {
+        pub fn with_defaults<'a>(
+            src_image: &'a dyn Image,
+            src_image_layout: vk::ImageLayout,
+            dst_image: &'a dyn Image,
+            dst_image_layout: vk::ImageLayout,
+        ) -> BlitImageInfo<'a> {
+            BlitImageInfo {
+                src_image,
+                src_image_layout,
+                dst_image,
+                dst_image_layout,
+                src_subresource: src_image.instance().info().default_subresource_layers(),
+                dst_subresource: dst_image.instance().info().default_subresource_layers(),
+                src_offset: vk::Offset3D::default(),
+                dst_offset: vk::Offset3D::default(),
+                src_extent: src_image.instance().info().extent().into(),
+                dst_extent: dst_image.instance().info().extent().into(),
+                scaling: vk::Filter::NEAREST,
+            }
+        }
     }
 }

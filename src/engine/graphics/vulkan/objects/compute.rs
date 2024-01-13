@@ -5,7 +5,10 @@ use voxei_macros::VulkanResource;
 
 use crate::engine::graphics::vulkan::vulkan::{Vulkan, VulkanDep};
 
-use super::{PipelineLayoutCreateInfo, PipelineLayoutInstance, Shader};
+use super::{
+    pipeline_layout::{PipelineLayoutCreateInfo, PipelineLayoutInstance},
+    shader::Shader,
+};
 
 pub type ComputePipelineDep = Arc<ComputePipelineInstance>;
 

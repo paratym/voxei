@@ -1,10 +1,10 @@
 use ash::vk;
 
-use super::objects::{Fence, Semaphore};
+use super::objects::command::CommandBuffer;
+use super::objects::sync::{Fence, Semaphore};
 use super::swapchain::Swapchain;
 use super::util::GenericResourceDep;
-use super::vulkan::{Vulkan, VulkanQueue};
-use super::{objects::CommandBuffer, vulkan::VulkanDep};
+use super::vulkan::{Vulkan, VulkanDep, VulkanQueue};
 use crate::engine::graphics::vulkan::util::VulkanResourceDep;
 
 /// A queue exectutor keeps track of in flight frame resources.

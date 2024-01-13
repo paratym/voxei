@@ -7,7 +7,7 @@ use voxei_macros::VulkanResource;
 
 use crate::engine::graphics::vulkan::{
     allocator::{MemoryAllocation, VulkanAllocationInfo, VulkanMemoryAllocator},
-    util::{GenericResourceDep, VulkanResource, VulkanResourceDep},
+    util::{Extent3D, GenericResourceDep, VulkanResource, VulkanResourceDep},
     vulkan::{Vulkan, VulkanDep},
 };
 
@@ -20,6 +20,7 @@ pub trait Image {
 }
 
 pub trait ImageInstance: VulkanResource + Send + Sync + 'static {
+    fn info(&self) -> &ImageInfo;
     fn image(&self) -> vk::Image;
     fn image_view(&self) -> Option<vk::ImageView>;
 }
@@ -37,12 +38,51 @@ where
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ImageInfo {
+    pub width: u32,
+    pub height: u32,
+    pub depth: u32,
+    pub format: vk::Format,
+}
+
+impl ImageInfo {
+    pub fn width(&self) -> u32 {
+        self.width
+    }
+
+    pub fn height(&self) -> u32 {
+        self.height
+    }
+
+    pub fn format(&self) -> vk::Format {
+        self.format
+    }
+
+    pub fn extent(&self) -> Extent3D {
+        Extent3D {
+            width: self.width,
+            height: self.height,
+            depth: self.depth,
+        }
+    }
+
+    pub fn default_subresource_layers(&self) -> vk::ImageSubresourceLayers {
+        vk::ImageSubresourceLayers::default()
+            .aspect_mask(vk::ImageAspectFlags::COLOR)
+            .mip_level(0)
+            .base_array_layer(0)
+            .layer_count(1)
+    }
+}
+
 #[derive(VulkanResource)]
 pub struct OwnedImageInstance {
     vulkan_dep: VulkanDep,
     image: vk::Image,
     image_view: Option<vk::ImageView>,
     allocation: MemoryAllocation,
+    info: ImageInfo,
 }
 
 impl OwnedImageInstance {
@@ -58,6 +98,10 @@ impl ImageInstance for OwnedImageInstance {
 
     fn image_view(&self) -> Option<vk::ImageView> {
         self.image_view
+    }
+
+    fn info(&self) -> &ImageInfo {
+        &self.info
     }
 }
 
@@ -152,6 +196,12 @@ impl OwnedImage {
                 image,
                 image_view,
                 allocation: memory_allocation,
+                info: ImageInfo {
+                    width: info.width,
+                    height: info.height,
+                    depth: 1,
+                    format: info.format,
+                },
             }),
         }
     }
@@ -175,6 +225,7 @@ pub struct BorrowedImageInstance {
     borrowed_dep: GenericResourceDep,
     image: vk::Image,
     image_view: Option<vk::ImageView>,
+    info: ImageInfo,
 }
 
 impl ImageInstance for BorrowedImageInstance {
@@ -184,6 +235,10 @@ impl ImageInstance for BorrowedImageInstance {
 
     fn image_view(&self) -> Option<vk::ImageView> {
         self.image_view
+    }
+
+    fn info(&self) -> &ImageInfo {
+        &self.info
     }
 }
 
@@ -196,6 +251,7 @@ pub struct BorrowedImage {
 pub struct BorrowedImageCreateInfo {
     pub image: vk::Image,
     pub image_view: Option<vk::ImageView>,
+    pub info: ImageInfo,
 }
 
 impl BorrowedImage {
@@ -205,6 +261,7 @@ impl BorrowedImage {
                 borrowed_dep: borrowed_from.into_generic(),
                 image: info.image,
                 image_view: info.image_view,
+                info: info.info.clone(),
             }),
         }
     }

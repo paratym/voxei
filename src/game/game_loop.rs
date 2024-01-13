@@ -1,12 +1,11 @@
-use crate::{
-    engine::{input::Input, system::System},
-    game::graphics::render_manager::RenderManager,
-};
+use crate::engine::{graphics::render_manager::RenderManager, input::Input, system::System};
 
-use super::app::App;
+use super::{app::App, graphics};
 
 pub fn game_loop(app: &mut App) {
-    execute_system(app, RenderManager::render_frame);
+    execute_system(app, RenderManager::begin_frame);
+    execute_system(app, graphics::set_submit_info);
+    execute_system(app, RenderManager::submit_frame);
     execute_system(app, Input::clear_inputs);
 }
 

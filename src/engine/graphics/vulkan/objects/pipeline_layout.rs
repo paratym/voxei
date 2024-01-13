@@ -1,7 +1,11 @@
 use ash::vk;
 
-use super::{DescriptorSetLayout, DescriptorSetLayoutDep, PushConstantRange};
 use crate::engine::graphics::vulkan::vulkan::{Vulkan, VulkanDep};
+
+use super::{
+    common::PushConstantRange,
+    descriptor_set::{DescriptorSetLayout, DescriptorSetLayoutDep},
+};
 
 pub struct PipelineLayoutInstance {
     vulkan_dep: VulkanDep,

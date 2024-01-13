@@ -8,8 +8,10 @@ use voxei_macros::{Resource, VulkanResource};
 
 use super::{
     objects::{
-        image::{self, util::ImageViewCreateInfo, BorrowedImageCreateInfo},
-        BorrowedImage, Semaphore,
+        image::{
+            self, util::ImageViewCreateInfo, BorrowedImage, BorrowedImageCreateInfo, ImageInfo,
+        },
+        sync::Semaphore,
     },
     util::Extent2D,
     vulkan::{Vulkan, VulkanDep},
@@ -173,7 +175,19 @@ impl SwapchainInstance {
                 None
             };
 
-            BorrowedImage::new(&swapchain, &BorrowedImageCreateInfo { image, image_view })
+            BorrowedImage::new(
+                &swapchain,
+                &BorrowedImageCreateInfo {
+                    image,
+                    image_view,
+                    info: ImageInfo {
+                        width: info.width,
+                        height: info.height,
+                        depth: 1,
+                        format: format.format,
+                    },
+                },
+            )
         })
         .collect();
 
@@ -222,8 +236,13 @@ impl Swapchain {
         Self { instance: None }
     }
 
-    pub fn image(&self, index: usize) -> &BorrowedImage {
-        self.instance.as_ref().unwrap().images.get(index).unwrap()
+    pub fn image(&self, index: u32) -> &BorrowedImage {
+        self.instance
+            .as_ref()
+            .unwrap()
+            .images
+            .get(index as usize)
+            .unwrap()
     }
 
     /// Constructs the swapchain and replaces the old one.
