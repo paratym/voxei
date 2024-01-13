@@ -1,5 +1,6 @@
 use ash::vk;
 
+use crate::engine::assets::manager::Assets;
 use crate::engine::graphics::queues::DefaultQueueExecutor;
 use crate::engine::graphics::render_manager::{FrameIndex, RenderManager};
 use crate::engine::graphics::resource_manager::RenderResourceManager;
@@ -61,7 +62,10 @@ pub fn setup_graphical_resources(app: &mut App) {
     let frame_index = FrameIndex::new();
     let resource_manager = RenderResourceManager::new();
     let render_manager = RenderManager::new(&vulkan);
-    let voxel_render_pass = VoxelRenderPass::new();
+    let voxel_render_pass = VoxelRenderPass::new(
+        &vulkan,
+        &mut app.resource_bank().get_resource_mut::<Assets>(),
+    );
 
     app.resource_bank_mut().insert(window);
     app.resource_bank_mut().insert(vulkan);
