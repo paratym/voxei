@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use ash::vk;
+use ash::vk::{self};
 use slotmap::{new_key_type, SlotMap};
 use voxei_macros::VulkanResource;
 
@@ -11,7 +11,12 @@ use crate::engine::graphics::vulkan::{
 
 use crate::engine::graphics::vulkan::util::VulkanResourceDep;
 
-use super::image::{Image, ImageMemoryBarrier};
+use super::{
+    compute::ComputePipeline,
+    descriptor_set::{DescriptorSetHandle, DescriptorSetPool},
+    image::{Image, ImageMemoryBarrier},
+    pipeline_layout::PipelineLayoutInstance,
+};
 
 new_key_type! { pub struct CommandBufferHandle; }
 
@@ -48,6 +53,9 @@ impl CommandBuffer {
     }
 
     pub fn blit_image(&mut self, info: util::BlitImageInfo) {
+        self.recorded_dependencies
+            .push(Arc::downgrade(&info.src_image.create_generic_dep()));
+
         unsafe {
             self.vulkan_dep.device().cmd_blit_image(
                 self.command_buffer,
@@ -58,6 +66,58 @@ impl CommandBuffer {
                 &[vk::ImageBlit::from(&info)],
                 info.scaling,
             );
+        }
+    }
+
+    pub fn bind_compute_pipeline(&mut self, compute_pipeline: &ComputePipeline) {
+        self.recorded_dependencies
+            .push(compute_pipeline.create_dep().into_generic_weak());
+
+        unsafe {
+            self.vulkan_dep.device().cmd_bind_pipeline(
+                self.command_buffer,
+                vk::PipelineBindPoint::COMPUTE,
+                compute_pipeline.instance().pipeline(),
+            );
+        }
+    }
+
+    pub fn bind_descriptor_sets(
+        &mut self,
+        pipeline_layout: &PipelineLayoutInstance,
+        pipeline_bind_point: vk::PipelineBindPoint,
+        descriptor_sets: Vec<(&DescriptorSetPool, Vec<DescriptorSetHandle>)>,
+    ) {
+        let descriptor_sets = descriptor_sets
+            .into_iter()
+            .flat_map(|(descriptor_pool, descriptor_set_handles)| {
+                self.recorded_dependencies
+                    .push(descriptor_pool.create_dep().into_generic_weak());
+
+                descriptor_pool
+                    .get_multiple(descriptor_set_handles)
+                    .into_iter()
+                    .map(|descriptor_set| descriptor_set.descriptor_set())
+            })
+            .collect::<Vec<_>>();
+
+        unsafe {
+            self.vulkan_dep.device().cmd_bind_descriptor_sets(
+                self.command_buffer,
+                pipeline_bind_point,
+                pipeline_layout.layout(),
+                0,
+                &descriptor_sets,
+                &[],
+            );
+        }
+    }
+
+    pub fn dispatch(&mut self, x: u32, y: u32, z: u32) {
+        unsafe {
+            self.vulkan_dep
+                .device()
+                .cmd_dispatch(self.command_buffer, x, y, z);
         }
     }
 

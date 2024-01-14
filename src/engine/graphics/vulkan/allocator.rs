@@ -72,17 +72,12 @@ impl VulkanMemoryAllocator {
                 .allocate_memory(&memory_allocate_info, None)
                 .expect("Failed to allocate memory")
         };
-        let allocated_size = unsafe {
-            self.vulkan_dep
-                .device()
-                .get_device_memory_commitment(device_memory)
-        };
 
         MemoryAllocation {
             instance: Arc::new(MemoryAllocationInstance {
                 vulkan_dep: self.vulkan_dep.clone(),
                 device_memory,
-                size: allocated_size,
+                size: info.size,
             }),
         }
     }

@@ -169,6 +169,13 @@ impl OwnedImage {
             memory_type_bits: memory_requirements.memory_type_bits,
         });
 
+        unsafe {
+            vulkan
+                .device()
+                .bind_image_memory(image, memory_allocation.instance().device_memory(), 0)
+                .expect("Failed to bind image memory")
+        };
+
         let image_view = match &info.view_create_info {
             Some(view_create_info) => {
                 let image_view_create_info = vk::ImageViewCreateInfo::default()

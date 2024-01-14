@@ -16,7 +16,10 @@ impl AssetLoader for SpirVLoader {
     where
         Self: Sized,
     {
-        let file_extension = file_path.split('.').last().unwrap();
+        let mut file_extension = file_path.split('.').last().unwrap();
+        if file_extension == "glsl" {
+            file_extension = file_path.split('.').nth_back(1).unwrap();
+        }
 
         let shader_kind = match file_extension {
             "vert" => shaderc::ShaderKind::Vertex,

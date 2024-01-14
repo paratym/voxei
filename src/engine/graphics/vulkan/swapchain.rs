@@ -27,8 +27,8 @@ struct SwapchainInstanceInternal {
 }
 
 pub struct SwapchainInfo {
-    pub extent: Extent2D,
-    pub format: vk::Format,
+    extent: Extent2D,
+    format: vk::Format,
 }
 
 impl SwapchainInfo {

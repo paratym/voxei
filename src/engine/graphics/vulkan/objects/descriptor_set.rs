@@ -9,6 +9,8 @@ use crate::engine::graphics::vulkan::{
     vulkan::{Vulkan, VulkanDep},
 };
 
+use super::image::Image;
+
 pub type DescriptorSetLayoutDep = Arc<DescriptorSetLayoutInstance>;
 
 #[derive(VulkanResource)]
@@ -116,6 +118,108 @@ impl DescriptorSet {
     pub fn written_dependencies(&self) -> &[WeakGenericResourceDep] {
         &self.written_dependencies
     }
+
+    pub fn writer(&mut self, vulkan: &Vulkan) -> DescriptorSetWriter {
+        DescriptorSetWriter::new(self, vulkan)
+    }
+}
+
+pub struct DescriptorSetWriter<'a> {
+    descriptor_set: &'a mut DescriptorSet,
+    vulkan_dep: VulkanDep,
+    writes: Vec<DescriptorWrite<'a>>,
+    image_infos: Vec<[vk::DescriptorImageInfo; 1]>,
+    written_dependencies: Vec<WeakGenericResourceDep>,
+}
+
+struct DescriptorWrite<'a> {
+    binding: u32,
+    vk_type: vk::DescriptorType,
+    write_type: DescriptorWriteType<'a>,
+}
+
+enum DescriptorWriteType<'a> {
+    Image {
+        image: &'a dyn Image,
+        layout: vk::ImageLayout,
+    },
+}
+
+impl<'a> DescriptorSetWriter<'a> {
+    pub fn new(descriptor_set: &'a mut DescriptorSet, vulkan: &Vulkan) -> Self {
+        Self {
+            descriptor_set,
+            vulkan_dep: vulkan.create_dep(),
+            writes: Vec::new(),
+            image_infos: Vec::new(),
+            written_dependencies: Vec::new(),
+        }
+    }
+
+    pub fn write_storage_image(
+        mut self,
+        binding: u32,
+        image: &'a dyn Image,
+        layout: vk::ImageLayout,
+    ) -> Self {
+        self.written_dependencies
+            .push(Arc::downgrade(&image.create_generic_dep()));
+        self.writes.push(DescriptorWrite {
+            binding,
+            vk_type: vk::DescriptorType::STORAGE_IMAGE,
+            write_type: DescriptorWriteType::Image { image, layout },
+        });
+
+        self
+    }
+
+    pub fn submit_writes(self) {
+        self.descriptor_set.written_dependencies = self.written_dependencies;
+
+        let image_infos = self
+            .writes
+            .iter()
+            .filter_map(|write| match &write.write_type {
+                DescriptorWriteType::Image { image, layout } => {
+                    Some([vk::DescriptorImageInfo::default()
+                        .image_layout(*layout)
+                        .image_view(image.instance().image_view().unwrap())])
+                }
+            })
+            .collect::<Vec<_>>();
+
+        // this can so easily break lol
+        let mut image_count = 0 as usize;
+        let vk_writes = self
+            .writes
+            .iter()
+            .map(|write| {
+                let mut info = vk::WriteDescriptorSet::default()
+                    .dst_set(self.descriptor_set.descriptor_set)
+                    .dst_binding(write.binding)
+                    .descriptor_type(write.vk_type);
+
+                match write.write_type {
+                    DescriptorWriteType::Image { .. } => {
+                        info = info.image_info(&image_infos[image_count]);
+                        image_count += 1;
+                    }
+                }
+
+                info
+            })
+            .collect::<Vec<_>>();
+
+        unsafe {
+            self.vulkan_dep
+                .device()
+                .update_descriptor_sets(&vk_writes, &[]);
+        }
+    }
+}
+
+pub struct DescriptorSetWriteStorageImageInfo<'a> {
+    pub image: &'a dyn Image,
 }
 
 pub type DescriptorSetPoolDep = Arc<DescriptorSetPoolInstance>;
@@ -230,5 +334,9 @@ impl DescriptorSetPool {
         }
 
         handles
+    }
+
+    pub fn create_dep(&self) -> DescriptorSetPoolDep {
+        self.instance.clone()
     }
 }

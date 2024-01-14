@@ -41,9 +41,11 @@ impl App {
                         WinitWindowEvent::CloseRequested => {
                             window.exit();
                         }
-                        WinitWindowEvent::RedrawRequested => game_loop(&mut self),
                         _ => {}
                     },
+                    WinitEvent::AboutToWait => {
+                        game_loop(&mut self);
+                    }
                     _ => {}
                 }
             })

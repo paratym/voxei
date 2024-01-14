@@ -125,7 +125,7 @@ impl RenderManager {
         render_manager.swapchain_image_index = Some(swapchain_image_index);
     }
 
-    pub fn main_command_buffer(&mut self, frame_index: usize) -> &CommandBuffer {
+    pub fn main_command_buffer(&mut self, frame_index: usize) -> &mut CommandBuffer {
         let current_frame = &mut self.frame_resources[frame_index];
         current_frame
             .command_pool
