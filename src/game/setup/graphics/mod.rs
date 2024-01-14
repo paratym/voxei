@@ -1,6 +1,6 @@
 use ash::vk;
 
-use crate::engine::assets::manager::Assets;
+use crate::engine::assets::asset::Assets;
 use crate::engine::graphics::queues::DefaultQueueExecutor;
 use crate::engine::graphics::render_manager::{FrameIndex, RenderManager};
 use crate::engine::graphics::resource_manager::RenderResourceManager;

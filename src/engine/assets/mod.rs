@@ -1,3 +1,3 @@
 pub mod asset;
 pub mod loader;
-pub mod manager;
+pub mod watched_shaders;
