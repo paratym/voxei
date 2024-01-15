@@ -2,6 +2,7 @@ use ash::vk;
 use voxei_macros::Resource;
 
 use crate::{
+    constants,
     engine::{
         assets::{
             asset::Assets,
@@ -13,13 +14,14 @@ use crate::{
             vulkan::{
                 allocator::VulkanMemoryAllocator,
                 objects::{
+                    buffer::{Buffer, BufferCreateInfo},
                     compute::{ComputePipeline, ComputePipelineCreateInfo},
-                    descriptor_set::{DescriptorSetLayout, DescriptorSetWriteStorageImageInfo},
+                    descriptor_set::DescriptorSetLayout,
+                    glsl::GlslVec2f,
                     image::ImageMemoryBarrier,
                     pipeline_layout::PipelineLayoutCreateInfo,
                     shader::Shader,
                 },
-                swapchain::Swapchain,
                 vulkan::Vulkan,
             },
         },
@@ -28,15 +30,26 @@ use crate::{
     game::graphics::{gfx_constants, pipeline::util as pipeline_util},
 };
 
+#[repr(C)]
+pub struct BufferData {
+    window_extent: GlslVec2f,
+}
+
 #[derive(Resource)]
 pub struct VoxelRenderPass {
     compute_pipeline: Option<ComputePipeline>,
     shader_signal: DependencySignal,
     descriptor_set_layout: DescriptorSetLayout,
+    main_uniform_buffers: [Buffer; constants::FRAMES_IN_FLIGHT],
 }
 
 impl VoxelRenderPass {
-    pub fn new(watched_shaders: &mut WatchedShaders, assets: &mut Assets, vulkan: &Vulkan) -> Self {
+    pub fn new(
+        watched_shaders: &mut WatchedShaders,
+        assets: &mut Assets,
+        vulkan: &Vulkan,
+        vulkan_memory_allocator: &mut VulkanMemoryAllocator,
+    ) -> Self {
         let shader_signal = watched_shaders.create_dependency_signal();
         watched_shaders.load_shader(
             assets,
@@ -52,12 +65,37 @@ impl VoxelRenderPass {
             1,
             vk::ShaderStageFlags::COMPUTE,
         );
+        descriptor_set_layout.add_binding(
+            1,
+            vk::DescriptorType::UNIFORM_BUFFER,
+            1,
+            vk::ShaderStageFlags::COMPUTE,
+        );
         let descriptor_set_layout = descriptor_set_layout.build(vulkan);
+
+        let main_uniform_buffers = (0..2)
+            .map(|_| {
+                Buffer::new(
+                    vulkan,
+                    vulkan_memory_allocator,
+                    &BufferCreateInfo {
+                        size: std::mem::size_of::<BufferData>() as u64,
+                        usage: vk::BufferUsageFlags::UNIFORM_BUFFER,
+                        // TODO: implement staging
+                        memory_usage: vk::MemoryPropertyFlags::HOST_VISIBLE
+                            | vk::MemoryPropertyFlags::HOST_COHERENT,
+                    },
+                )
+            })
+            .collect::<Vec<_>>()
+            .try_into()
+            .unwrap();
 
         Self {
             compute_pipeline: None,
             shader_signal,
             descriptor_set_layout,
+            main_uniform_buffers,
         }
     }
 
@@ -99,7 +137,36 @@ impl VoxelRenderPass {
         descriptor_set
             .writer(&vulkan)
             .write_storage_image(0, backbuffer_image, vk::ImageLayout::GENERAL)
+            .write_uniform_buffer(1, &voxel_pass.main_uniform_buffers[frame_index.index()])
             .submit_writes();
+
+        // Update uniform buffers
+        let map_ptr = voxel_pass.main_uniform_buffers[frame_index.index()]
+            .instance()
+            .allocation()
+            .instance()
+            .map_memory(0);
+
+        let window_extent = GlslVec2f::new(
+            backbuffer_image.instance().info().width() as f32,
+            backbuffer_image.instance().info().height() as f32,
+        );
+
+        unsafe {
+            std::ptr::copy_nonoverlapping(
+                &BufferData {
+                    window_extent: window_extent.into(),
+                },
+                map_ptr as *mut BufferData,
+                1,
+            );
+        }
+
+        voxel_pass.main_uniform_buffers[frame_index.index()]
+            .instance()
+            .allocation()
+            .instance()
+            .unmap_memory();
     }
 
     pub fn render(

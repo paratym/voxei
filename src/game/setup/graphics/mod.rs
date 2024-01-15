@@ -46,7 +46,7 @@ pub fn setup_graphical_resources(app: &mut App) {
         swapchain_support: SwapchainSupport::Supported(&window, &window),
     });
 
-    let vulkan_memory_allocator = VulkanMemoryAllocator::new(&vulkan);
+    let mut vulkan_memory_allocator = VulkanMemoryAllocator::new(&vulkan);
 
     let mut swapchain = Swapchain::new();
     swapchain.refresh(
@@ -70,6 +70,7 @@ pub fn setup_graphical_resources(app: &mut App) {
         &mut app.resource_bank().get_resource_mut::<WatchedShaders>(),
         &mut app.resource_bank().get_resource_mut::<Assets>(),
         &vulkan,
+        &mut vulkan_memory_allocator,
     );
 
     app.resource_bank_mut().insert(window);

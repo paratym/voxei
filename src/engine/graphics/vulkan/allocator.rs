@@ -29,6 +29,26 @@ impl MemoryAllocationInstance {
     pub fn size(&self) -> u64 {
         self.size
     }
+
+    pub fn map_memory(&self, offset: u64) -> *mut std::ffi::c_void {
+        unsafe {
+            self.vulkan_dep
+                .device()
+                .map_memory(
+                    self.device_memory,
+                    offset,
+                    self.size,
+                    vk::MemoryMapFlags::empty(),
+                )
+                .expect("Failed to map memory")
+        }
+    }
+
+    pub fn unmap_memory(&self) {
+        unsafe {
+            self.vulkan_dep.device().unmap_memory(self.device_memory);
+        }
+    }
 }
 
 impl Drop for MemoryAllocationInstance {

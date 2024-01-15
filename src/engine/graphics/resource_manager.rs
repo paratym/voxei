@@ -18,6 +18,8 @@ use super::vulkan::{
     vulkan::Vulkan,
 };
 
+// TODO: Remove this and split up the resources into separate resources, make the api nicer for
+// persistent resources that are commonly shared.
 #[derive(Resource)]
 pub struct RenderResourceManager {
     images: HashMap<String, OwnedImage>,

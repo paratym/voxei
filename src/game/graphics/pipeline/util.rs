@@ -1,5 +1,4 @@
 use ash::vk;
-use voxei_macros::Resource;
 
 use crate::{
     engine::{
@@ -7,10 +6,7 @@ use crate::{
             resource_manager::RenderResourceManager,
             vulkan::{
                 allocator::VulkanMemoryAllocator,
-                objects::{
-                    descriptor_set::DescriptorSetLayout,
-                    image::{util::ImageViewCreateInfo, Image, OwnedImageCreateInfo},
-                },
+                objects::image::{util::ImageViewCreateInfo, Image, OwnedImageCreateInfo},
                 swapchain::Swapchain,
                 vulkan::Vulkan,
             },

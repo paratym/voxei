@@ -9,7 +9,8 @@ use crate::engine::graphics::vulkan::{
     vulkan::{Vulkan, VulkanDep},
 };
 
-use super::image::Image;
+use super::{buffer::Buffer, image::Image};
+use crate::engine::graphics::vulkan::util::VulkanResourceDep;
 
 pub type DescriptorSetLayoutDep = Arc<DescriptorSetLayoutInstance>;
 
@@ -128,7 +129,6 @@ pub struct DescriptorSetWriter<'a> {
     descriptor_set: &'a mut DescriptorSet,
     vulkan_dep: VulkanDep,
     writes: Vec<DescriptorWrite<'a>>,
-    image_infos: Vec<[vk::DescriptorImageInfo; 1]>,
     written_dependencies: Vec<WeakGenericResourceDep>,
 }
 
@@ -139,6 +139,9 @@ struct DescriptorWrite<'a> {
 }
 
 enum DescriptorWriteType<'a> {
+    Buffer {
+        buffer: &'a Buffer,
+    },
     Image {
         image: &'a dyn Image,
         layout: vk::ImageLayout,
@@ -151,9 +154,21 @@ impl<'a> DescriptorSetWriter<'a> {
             descriptor_set,
             vulkan_dep: vulkan.create_dep(),
             writes: Vec::new(),
-            image_infos: Vec::new(),
             written_dependencies: Vec::new(),
         }
+    }
+
+    pub fn write_uniform_buffer(mut self, binding: u32, buffer: &'a Buffer) -> Self {
+        self.written_dependencies
+            .push(buffer.create_dep().into_generic_weak());
+
+        self.writes.push(DescriptorWrite {
+            binding,
+            vk_type: vk::DescriptorType::UNIFORM_BUFFER,
+            write_type: DescriptorWriteType::Buffer { buffer },
+        });
+
+        self
     }
 
     pub fn write_storage_image(
@@ -180,6 +195,7 @@ impl<'a> DescriptorSetWriter<'a> {
             .writes
             .iter()
             .filter_map(|write| match &write.write_type {
+                DescriptorWriteType::Buffer { .. } => None,
                 DescriptorWriteType::Image { image, layout } => {
                     Some([vk::DescriptorImageInfo::default()
                         .image_layout(*layout)
@@ -187,8 +203,22 @@ impl<'a> DescriptorSetWriter<'a> {
                 }
             })
             .collect::<Vec<_>>();
+        let buffer_infos = self
+            .writes
+            .iter()
+            .filter_map(|write| match &write.write_type {
+                DescriptorWriteType::Buffer { buffer } => {
+                    Some([vk::DescriptorBufferInfo::default()
+                        .buffer(buffer.instance().buffer())
+                        .offset(0)
+                        .range(vk::WHOLE_SIZE)])
+                }
+                DescriptorWriteType::Image { .. } => None,
+            })
+            .collect::<Vec<_>>();
 
         // this can so easily break lol
+        let mut buffer_count = 0 as usize;
         let mut image_count = 0 as usize;
         let vk_writes = self
             .writes
@@ -200,6 +230,10 @@ impl<'a> DescriptorSetWriter<'a> {
                     .descriptor_type(write.vk_type);
 
                 match write.write_type {
+                    DescriptorWriteType::Buffer { .. } => {
+                        info = info.buffer_info(&buffer_infos[buffer_count]);
+                        buffer_count += 1;
+                    }
                     DescriptorWriteType::Image { .. } => {
                         info = info.image_info(&image_infos[image_count]);
                         image_count += 1;
