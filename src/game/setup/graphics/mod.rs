@@ -2,6 +2,7 @@ use ash::vk;
 
 use crate::engine::assets::asset::Assets;
 use crate::engine::assets::watched_shaders::WatchedShaders;
+use crate::engine::common::camera::PrimaryCamera;
 use crate::engine::graphics::queues::DefaultQueueExecutor;
 use crate::engine::graphics::render_manager::{FrameIndex, RenderManager};
 use crate::engine::graphics::resource_manager::RenderResourceManager;
@@ -11,6 +12,7 @@ use crate::engine::window::window::{Window, WindowConfig};
 use crate::game::app::App;
 
 use crate::game::graphics::pipeline::voxel::pass::VoxelRenderPass;
+use crate::settings::Settings;
 use crate::{
     constants,
     engine::graphics::vulkan::{
@@ -73,6 +75,8 @@ pub fn setup_graphical_resources(app: &mut App) {
         &mut vulkan_memory_allocator,
     );
 
+    let primary_camera = PrimaryCamera::new(&vulkan, &mut vulkan_memory_allocator);
+
     app.resource_bank_mut().insert(window);
     app.resource_bank_mut().insert(vulkan);
     app.resource_bank_mut().insert(vulkan_memory_allocator);
@@ -82,4 +86,5 @@ pub fn setup_graphical_resources(app: &mut App) {
     app.resource_bank_mut().insert(resource_manager);
     app.resource_bank_mut().insert(render_manager);
     app.resource_bank_mut().insert(voxel_render_pass);
+    app.resource_bank_mut().insert(primary_camera);
 }

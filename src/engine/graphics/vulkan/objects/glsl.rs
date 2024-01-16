@@ -36,3 +36,20 @@ impl GlslVec4f {
         Self { x, y, z, w }
     }
 }
+
+#[repr(align(64))]
+pub struct GlslMat4f {
+    pub arr: [f32; 16],
+}
+
+impl GlslMat4f {
+    pub fn new(arr: [f32; 16]) -> Self {
+        Self { arr }
+    }
+}
+
+impl Default for GlslMat4f {
+    fn default() -> Self {
+        Self { arr: [0.0; 16] }
+    }
+}

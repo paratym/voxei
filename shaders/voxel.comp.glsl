@@ -5,6 +5,11 @@ layout (set = 0, binding = 0, rgba8) uniform image2D img_output;
 layout (set = 0, binding = 1) uniform UBuf {
   vec2 resolution;
 };
+layout (set = 0, binding = 2) uniform Camera {
+  mat4 view;
+  mat4 proj;
+  mat4 proj_view;
+};
 
 void main() {
   vec2 coord = gl_GlobalInvocationID.xy;

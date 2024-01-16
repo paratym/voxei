@@ -7,6 +7,7 @@ edition = "2021"
 ash = { git = "https://github.com/ash-rs/ash", branch = "rwh-0.6" }
 ash-window = { git = "https://github.com/ash-rs/ash", branch = "rwh-0.6" }
 downcast = "0.11.0"
+nalgebra = "0.32.3"
 notify = "6.1.1"
 parking_lot = "0.12.1"
 raw-window-handle = "0.6.0"

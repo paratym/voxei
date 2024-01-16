@@ -5,7 +5,7 @@ use crate::engine::{
     resource::ResMut,
 };
 
-mod gfx_constants;
+pub mod gfx_constants;
 pub mod pipeline;
 
 pub fn set_submit_info(mut render_manager: ResMut<RenderManager>) {

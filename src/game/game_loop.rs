@@ -1,5 +1,6 @@
 use crate::engine::{
     assets::{asset::Assets, watched_shaders::WatchedShaders},
+    common::camera::PrimaryCamera,
     graphics::render_manager::RenderManager,
     input::Input,
     system::System,
@@ -17,6 +18,8 @@ pub fn game_loop(app: &mut App) {
     // Asset systems updating
     execute_system(app, Assets::update);
     execute_system(app, WatchedShaders::update);
+
+    execute_system(app, PrimaryCamera::update);
 
     // Rendering
     execute_system(app, RenderManager::begin_frame);

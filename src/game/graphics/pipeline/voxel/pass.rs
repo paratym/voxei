@@ -8,6 +8,7 @@ use crate::{
             asset::Assets,
             watched_shaders::{DependencySignal, WatchedShaders},
         },
+        common::camera::PrimaryCamera,
         graphics::{
             render_manager::{FrameIndex, RenderManager},
             resource_manager::RenderResourceManager,
@@ -71,6 +72,12 @@ impl VoxelRenderPass {
             1,
             vk::ShaderStageFlags::COMPUTE,
         );
+        descriptor_set_layout.add_binding(
+            2,
+            vk::DescriptorType::UNIFORM_BUFFER,
+            1,
+            vk::ShaderStageFlags::COMPUTE,
+        );
         let descriptor_set_layout = descriptor_set_layout.build(vulkan);
 
         let main_uniform_buffers = (0..2)
@@ -105,6 +112,7 @@ impl VoxelRenderPass {
         vulkan: Res<Vulkan>,
         render_resource_manager: ResMut<RenderResourceManager>,
         frame_index: Res<FrameIndex>,
+        primary_camera: Res<PrimaryCamera>,
     ) {
         if watched_shaders.is_dependency_signaled(&voxel_pass.shader_signal) {
             let shader_code = watched_shaders
@@ -138,6 +146,10 @@ impl VoxelRenderPass {
             .writer(&vulkan)
             .write_storage_image(0, backbuffer_image, vk::ImageLayout::GENERAL)
             .write_uniform_buffer(1, &voxel_pass.main_uniform_buffers[frame_index.index()])
+            .write_uniform_buffer(
+                2,
+                primary_camera.camera().uniform_buffer(frame_index.index()),
+            )
             .submit_writes();
 
         // Update uniform buffers
