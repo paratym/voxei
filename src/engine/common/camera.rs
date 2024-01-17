@@ -3,7 +3,9 @@ use voxei_macros::Resource;
 
 use crate::constants;
 use crate::engine::graphics::render_manager::FrameIndex;
-use crate::engine::graphics::vulkan::objects::glsl::GlslMat4f;
+use crate::engine::graphics::vulkan::objects::glsl::{
+    GlslDataBuilder, GlslFloat, GlslMat4f, GlslVec2f, GlslVec3f,
+};
 use crate::engine::graphics::vulkan::objects::image::Image;
 use crate::engine::resource::Res;
 use crate::game::graphics::gfx_constants;
@@ -61,6 +63,8 @@ impl PrimaryCamera {
             {
                 primary_camera.camera.fov = settings.camera_fov;
                 primary_camera.camera.aspect_ratio = aspect_ratio;
+                primary_camera.camera.resolution =
+                    (backbuffer_info.width(), backbuffer_info.height());
 
                 primary_camera.camera.refresh_projection(
                     primary_camera.camera.aspect_ratio,
@@ -92,19 +96,29 @@ pub struct Camera {
     buffer_data: CameraBufferData,
     buffers: [Buffer; constants::FRAMES_IN_FLIGHT],
 
+    resolution: (u32, u32),
     fov: f32,
     aspect_ratio: f32,
 }
 
+#[repr(C)]
 pub struct CameraBufferData {
     view: GlslMat4f,
     projection: GlslMat4f,
     proj_view: GlslMat4f,
+    resolution: GlslVec2f,
+    aspect_ratio: GlslFloat,
+    fov: GlslFloat,
+    position: GlslVec3f,
 }
 
 impl Default for CameraBufferData {
     fn default() -> Self {
         Self {
+            position: GlslVec3f::default(),
+            aspect_ratio: GlslFloat::default(),
+            fov: GlslFloat::default(),
+            resolution: GlslVec2f::default(),
             view: GlslMat4f::default(),
             projection: GlslMat4f::default(),
             proj_view: GlslMat4f::default(),
@@ -139,6 +153,7 @@ impl Camera {
             buffers,
             fov: 0.0,
             aspect_ratio: 0.0,
+            resolution: (0, 0),
         }
     }
 
@@ -151,6 +166,11 @@ impl Camera {
         self.view = transform.to_matrix();
 
         self.proj_view = self.projection * self.view;
+        self.buffer_data.position = transform.isometry.translation.vector.into();
+        self.buffer_data.aspect_ratio.val = self.aspect_ratio;
+        self.buffer_data.fov.val = self.fov;
+        self.buffer_data.resolution =
+            GlslVec2f::new(self.resolution.0 as f32, self.resolution.1 as f32);
         self.buffer_data
             .view
             .arr
@@ -170,9 +190,20 @@ impl Camera {
             .instance()
             .map_memory(0);
 
+        let mut data_builder = GlslDataBuilder::new();
+        data_builder.push(self.buffer_data.view.clone());
+        data_builder.push(self.buffer_data.projection.clone());
+        data_builder.push(self.buffer_data.proj_view.clone());
+        data_builder.push(self.buffer_data.resolution.clone());
+        data_builder.push(self.buffer_data.aspect_ratio.clone());
+        data_builder.push(self.buffer_data.fov.clone());
+        data_builder.push(self.buffer_data.position.clone());
+
+        let data = data_builder.build();
+
         unsafe {
             std::ptr::copy_nonoverlapping(
-                &self.buffer_data as *const CameraBufferData as *const u8,
+                data.as_ptr(),
                 map_ptr as *mut u8,
                 std::mem::size_of::<CameraBufferData>(),
             );

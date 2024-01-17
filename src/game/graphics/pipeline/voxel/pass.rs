@@ -31,7 +31,6 @@ use crate::{
     game::graphics::{gfx_constants, pipeline::util as pipeline_util},
 };
 
-#[repr(C)]
 pub struct BufferData {
     window_extent: GlslVec2f,
 }
@@ -68,12 +67,6 @@ impl VoxelRenderPass {
         );
         descriptor_set_layout.add_binding(
             1,
-            vk::DescriptorType::UNIFORM_BUFFER,
-            1,
-            vk::ShaderStageFlags::COMPUTE,
-        );
-        descriptor_set_layout.add_binding(
-            2,
             vk::DescriptorType::UNIFORM_BUFFER,
             1,
             vk::ShaderStageFlags::COMPUTE,
@@ -145,9 +138,8 @@ impl VoxelRenderPass {
         descriptor_set
             .writer(&vulkan)
             .write_storage_image(0, backbuffer_image, vk::ImageLayout::GENERAL)
-            .write_uniform_buffer(1, &voxel_pass.main_uniform_buffers[frame_index.index()])
             .write_uniform_buffer(
-                2,
+                1,
                 primary_camera.camera().uniform_buffer(frame_index.index()),
             )
             .submit_writes();
