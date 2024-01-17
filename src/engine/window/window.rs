@@ -52,6 +52,19 @@ impl Window {
         Self { winit_window }
     }
 
+    pub fn set_cursor_grabbed(&mut self, grabbed: bool) {
+        let grab_mode = if grabbed {
+            winit::window::CursorGrabMode::Locked
+        } else {
+            winit::window::CursorGrabMode::None
+        };
+        self.winit_window.set_cursor_grab(grab_mode).unwrap();
+    }
+
+    pub fn set_cursor_visible(&mut self, visible: bool) {
+        self.winit_window.set_cursor_visible(visible);
+    }
+
     pub fn set_visible(&mut self, visible: bool) {
         self.winit_window.set_visible(visible);
     }

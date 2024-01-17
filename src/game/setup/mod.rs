@@ -1,6 +1,7 @@
 use crate::{
     engine::{
         assets::{asset::Assets, loader::spirv::SpirVLoader, watched_shaders::WatchedShaders},
+        common::time::Time,
         input::Input,
     },
     settings::Settings,
@@ -13,6 +14,7 @@ mod graphics;
 pub fn setup_resources(app: &mut App) {
     app.resource_bank_mut().insert(Settings::default());
     app.resource_bank_mut().insert(Input::new());
+    app.resource_bank_mut().insert(Time::new());
 
     // Assets
     let mut assets = Assets::new();

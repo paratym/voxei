@@ -1,4 +1,5 @@
 use ash::vk;
+use nalgebra::{Translation3, Vector3};
 use voxei_macros::Resource;
 
 use crate::constants;
@@ -7,7 +8,10 @@ use crate::engine::graphics::vulkan::objects::glsl::{
     GlslDataBuilder, GlslFloat, GlslMat4f, GlslVec2f, GlslVec3f,
 };
 use crate::engine::graphics::vulkan::objects::image::Image;
+use crate::engine::input::keyboard::Key;
+use crate::engine::input::Input;
 use crate::engine::resource::Res;
+use crate::engine::window::window::Window;
 use crate::game::graphics::gfx_constants;
 
 use crate::engine::{
@@ -23,12 +27,15 @@ use crate::engine::{
 };
 use crate::settings::Settings;
 
+use super::time::Time;
 use super::transform::Transform;
 
 #[derive(Resource)]
 pub struct PrimaryCamera {
     camera: Camera,
     transform: Transform,
+    euler_angles: Vector3<f32>,
+    focused: bool,
 }
 
 impl PrimaryCamera {
@@ -38,6 +45,8 @@ impl PrimaryCamera {
         Self {
             camera: Camera::new(vulkan, vulkan_memory_allocator),
             transform,
+            euler_angles: Vector3::new(0.0, 0.0, 0.0),
+            focused: false,
         }
     }
 
@@ -46,12 +55,79 @@ impl PrimaryCamera {
         settings: Res<Settings>,
         render_resource_manager: Res<RenderResourceManager>,
         frame_index: Res<FrameIndex>,
+        input: Res<Input>,
+        time: Res<Time>,
+        mut window: ResMut<Window>,
     ) {
         let primary_camera = &mut *primary_camera;
 
+        // Input handling & transform update
+
+        if input.is_key_pressed(Key::Tab) {
+            primary_camera.focused = !primary_camera.focused;
+            window.set_cursor_grabbed(primary_camera.focused);
+            window.set_cursor_visible(!primary_camera.focused);
+        }
+
+        let transform = &mut primary_camera.transform;
+
+        let mouse_delta = input.mouse().mouse_delta();
+        if mouse_delta != (0.0, 0.0) && primary_camera.focused {
+            let rx = mouse_delta.0.to_radians();
+            let ry = mouse_delta.1.to_radians();
+
+            let euler_angles = &mut primary_camera.euler_angles;
+            euler_angles.x += ry;
+            euler_angles.y += rx;
+
+            let rotation = nalgebra::UnitQuaternion::from_euler_angles(
+                euler_angles.x,
+                euler_angles.y,
+                euler_angles.z,
+            );
+
+            transform.isometry.rotation = rotation;
+        }
+
+        let rotation = transform.isometry.rotation;
+        let mut forward = rotation * nalgebra::Vector3::z();
+        let mut right = rotation * nalgebra::Vector3::x();
+        let up = nalgebra::Vector3::<f32>::y();
+        forward.y = 0.0;
+        forward = forward.normalize();
+        right.y = 0.0;
+        right = right.normalize();
+
+        let mut speed = 1.0;
+        let mut delta = Vector3::new(0.0, 0.0, 0.0);
+        if input.is_key_down(Key::W) {
+            println!("W");
+            delta += forward;
+        }
+        if input.is_key_down(Key::S) {
+            delta -= forward;
+        }
+        if input.is_key_down(Key::A) {
+            delta -= right;
+        }
+        if input.is_key_down(Key::D) {
+            delta += right;
+        }
+        if input.is_key_down(Key::Space) {
+            delta += up;
+        }
+        if input.is_key_down(Key::LShift) {
+            delta -= up;
+        }
+        if input.is_key_down(Key::LControl) {
+            speed = 5.0;
+        }
+
+        transform.isometry.translation.vector += delta * speed * time.delta_time().as_secs_f32();
+
         primary_camera
             .camera
-            .update(&primary_camera.transform, frame_index.index());
+            .update(&primary_camera.transform, frame_index.index(), &input);
 
         if let Some(backbuffer_info) =
             render_resource_manager.get_image(gfx_constants::BACKBUFFER_IMAGE_NAME)
@@ -162,10 +238,10 @@ impl Camera {
             nalgebra::Perspective3::new(aspect_ratio, fov, near, far).to_homogeneous();
     }
 
-    pub fn update(&mut self, transform: &Transform, frame_index: usize) {
-        self.view = transform.to_matrix();
-
+    pub fn update(&mut self, transform: &Transform, frame_index: usize, input: &Input) {
+        self.view = transform.to_matrix().transpose();
         self.proj_view = self.projection * self.view;
+
         self.buffer_data.position = transform.isometry.translation.vector.into();
         self.buffer_data.aspect_ratio.val = self.aspect_ratio;
         self.buffer_data.fov.val = self.fov;

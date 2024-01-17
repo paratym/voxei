@@ -1,6 +1,6 @@
 use winit::event_loop::EventLoop;
 
-use crate::engine::resource::ResourceBank;
+use crate::engine::{input::Input, resource::ResourceBank};
 use winit::event::{Event as WinitEvent, WindowEvent as WinitWindowEvent};
 
 use super::game_loop::game_loop;
@@ -41,8 +41,17 @@ impl App {
                         WinitWindowEvent::CloseRequested => {
                             window.exit();
                         }
-                        _ => {}
+                        event => {
+                            self.resource_bank_mut()
+                                .get_resource_mut::<Input>()
+                                .handle_winit_window_event(event);
+                        }
                     },
+                    WinitEvent::DeviceEvent { device_id, event } => {
+                        self.resource_bank_mut()
+                            .get_resource_mut::<Input>()
+                            .handle_winit_device_event(device_id, event);
+                    }
                     WinitEvent::AboutToWait => {
                         game_loop(&mut self);
                     }

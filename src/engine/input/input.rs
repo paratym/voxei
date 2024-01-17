@@ -2,6 +2,9 @@ use voxei_macros::Resource;
 
 use crate::engine::resource::ResMut;
 
+use winit::event::DeviceEvent as WinitDeviceEvent;
+use winit::event::DeviceId as WinitDeviceId;
+
 use super::{
     keyboard::{self, Keyboard},
     mouse::{self, Mouse},
@@ -104,5 +107,57 @@ impl Input {
 
     pub fn mouse_mut(&mut self) -> &mut Mouse {
         &mut self.mouse
+    }
+
+    pub fn handle_winit_device_event(&mut self, device_id: WinitDeviceId, event: WinitDeviceEvent) {
+        match event {
+            WinitDeviceEvent::Key(key_event) => {
+                if let winit::keyboard::PhysicalKey::Code(winit_key_code) = key_event.physical_key {
+                    if let Some(key) = keyboard::Key::from_winit_key_code(winit_key_code) {
+                        match key_event.state {
+                            winit::event::ElementState::Pressed => {
+                                self.keyboard
+                                    .submit_input(keyboard::SubmitInput::Pressed(key));
+                            }
+                            winit::event::ElementState::Released => {
+                                self.keyboard
+                                    .submit_input(keyboard::SubmitInput::Released(key));
+                            }
+                        }
+                    }
+                }
+            }
+            WinitDeviceEvent::MouseMotion { delta } => {
+                self.mouse
+                    .submit_input(mouse::SubmitInput::Delta(delta.0 as f32, delta.1 as f32));
+            }
+            _ => {}
+        }
+    }
+
+    pub fn handle_winit_window_event(&mut self, event: winit::event::WindowEvent) {
+        if let winit::event::WindowEvent::KeyboardInput {
+            device_id,
+            event,
+            is_synthetic,
+        } = event
+        {
+            if !is_synthetic {
+                if let winit::keyboard::PhysicalKey::Code(winit_key_code) = event.physical_key {
+                    if let Some(key) = keyboard::Key::from_winit_key_code(winit_key_code) {
+                        match event.state {
+                            winit::event::ElementState::Pressed => {
+                                self.keyboard
+                                    .submit_input(keyboard::SubmitInput::Pressed(key));
+                            }
+                            winit::event::ElementState::Released => {
+                                self.keyboard
+                                    .submit_input(keyboard::SubmitInput::Released(key));
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }

@@ -16,33 +16,33 @@ float distance_to_sphere(vec3 p, vec3 center, float radius) {
   return length(p - center) - radius;
 }
 
-void main() {
-  vec2 coord = gl_GlobalInvocationID.xy;
-  vec4 color = vec4(0.0, 1.0, 0.0, 1.0);
+vec4 calculate_lighting(vec3 p, vec3 n, vec3 rd) {
+  const vec3 LIGHT_POS = vec3(2.0, 2.0, 2.0);
+  vec3 light_dir = normalize(LIGHT_POS - p);
+  float diffuse = max(dot(n, light_dir), 0.1);
 
-  if(coord.x > camera.resolution.x || coord.y > camera.resolution.y) {
-    return;
-  }
+  const vec3 BASE_COLOR = vec3(1.0, 0.4, 0.2);
 
-  vec2 ndc = coord / camera.resolution;
-  vec2 uv = vec2(ndc.x * 2.0 - 1.0, 1 - 2 * ndc.y);
-  vec2 scaled_uv = vec2(uv.x * camera.aspect, uv.y) * tan(camera.fov / 2.0);
+  return vec4(BASE_COLOR * diffuse, 1.0);
+}
 
-  vec3 ro = camera.position;
-  vec3 rd = vec3(scaled_uv, 1.0);
-
+vec4 ray_march(vec3 ro, vec3 rd) {
   float t = 0.0;
   const int MAX_STEPS = 32;
   const float MAX_DIST = 100.0;
   const float HIT_DIST = 0.001;
 
+  const vec3 SPHERE_CENTER = vec3(0.0, 0.0, 5.0);
+  const float SPHERE_RADIUS = 1.0;
+
   for(int i = 0; i < MAX_STEPS; i++) {
     vec3 p = ro + rd * t;
-    float d = distance_to_sphere(p, vec3(0.0, 0.0, 5.0), 1.0);
+    float d = distance_to_sphere(p, SPHERE_CENTER, SPHERE_RADIUS);
 
     if(d < HIT_DIST) {
-      color = vec4(1.0, 0.0, 0.0, 1.0);
-      break;
+      vec3 n = normalize(p - SPHERE_CENTER);
+
+      return calculate_lighting(p, n, rd);
     }
     if(t > MAX_DIST) {
       break;
@@ -51,6 +51,23 @@ void main() {
     t += d;
   }
 
+  return vec4(0.0, 0.0, 0.0, 1.0);
+}
+
+void main() {
+  vec2 coord = gl_GlobalInvocationID.xy;
+  if(coord.x > camera.resolution.x || coord.y > camera.resolution.y) {
+    return;
+  }
+
+  vec2 ndc = coord / camera.resolution;
+  vec2 uv = vec2(ndc.x * 2.0 - 1.0, 1 - 2 * ndc.y);
+  vec2 scaled_uv = vec2(uv.x * camera.aspect, uv.y) * tan(camera.fov / 2.0);
+
+  vec3 ro = vec3(vec4(0.0, 0.0, 0.0, 1.0) * camera.view);
+  vec3 rd = normalize(vec3(scaled_uv, 1.0)) * mat3(camera.view);
+
+  vec4 color = ray_march(ro, rd);
   
   imageStore(img_output, ivec2(coord), color);
 }
