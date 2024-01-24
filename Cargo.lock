@@ -1342,6 +1342,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tobj"
+version = "4.0.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "5f7ca3ec0405b0f2f95e0dbcced28882190dc79b0dac63ff82533d256d770223"
+dependencies = [
+ "ahash",
+]
+
+[[package]]
 name = "toml_datetime"
 version = "0.6.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1428,6 +1437,7 @@ dependencies = [
  "regex",
  "shaderc",
  "slotmap",
+ "tobj",
  "uuid",
  "voxei-macros",
  "winit",

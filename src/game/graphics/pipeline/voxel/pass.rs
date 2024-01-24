@@ -28,7 +28,10 @@ use crate::{
         },
         resource::{Res, ResMut},
     },
-    game::graphics::{gfx_constants, pipeline::util as pipeline_util},
+    game::{
+        graphics::{gfx_constants, pipeline::util as pipeline_util},
+        world::terrain::Terrain,
+    },
 };
 
 pub struct BufferData {
@@ -71,6 +74,12 @@ impl VoxelRenderPass {
             1,
             vk::ShaderStageFlags::COMPUTE,
         );
+        descriptor_set_layout.add_binding(
+            2,
+            vk::DescriptorType::STORAGE_BUFFER,
+            1,
+            vk::ShaderStageFlags::COMPUTE,
+        );
         let descriptor_set_layout = descriptor_set_layout.build(vulkan);
 
         let main_uniform_buffers = (0..2)
@@ -106,6 +115,7 @@ impl VoxelRenderPass {
         render_resource_manager: ResMut<RenderResourceManager>,
         frame_index: Res<FrameIndex>,
         primary_camera: Res<PrimaryCamera>,
+        terrain: Res<Terrain>,
     ) {
         if watched_shaders.is_dependency_signaled(&voxel_pass.shader_signal) {
             let shader_code = watched_shaders

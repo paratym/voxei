@@ -1,4 +1,7 @@
-#version 450 core
+#version 450
+
+#include "lib/voxel.glsl"
+
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 layout (set = 0, binding = 0, rgba8) uniform image2D img_output;
@@ -11,10 +14,10 @@ layout (set = 0, binding = 1) uniform Camera {
   float aspect;
   vec3 position;
 } camera;
-
-float distance_to_sphere(vec3 p, vec3 center, float radius) {
-  return length(p - center) - radius;
-}
+layout (set = 0, binding = 2) buffer voxel_ssbo {
+  uint num_length;
+  VoxelData voxels[];
+};
 
 vec4 calculate_lighting(vec3 p, vec3 n, vec3 rd) {
   const vec3 LIGHT_POS = vec3(2.0, 2.0, 2.0);

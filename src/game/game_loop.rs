@@ -12,6 +12,7 @@ use super::{
         self,
         pipeline::{util as pipeline_util, voxel::pass::VoxelRenderPass},
     },
+    world::sponza::Sponza,
 };
 
 pub fn game_loop(app: &mut App) {
@@ -22,7 +23,11 @@ pub fn game_loop(app: &mut App) {
     execute_system(app, Assets::update);
     execute_system(app, WatchedShaders::update);
 
+    // Update camera position and gpu buffers
     execute_system(app, PrimaryCamera::update);
+
+    // Update world resources
+    execute_system(app, Sponza::update);
 
     // Rendering
     execute_system(app, RenderManager::begin_frame);

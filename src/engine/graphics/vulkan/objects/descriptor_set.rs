@@ -188,6 +188,19 @@ impl<'a> DescriptorSetWriter<'a> {
         self
     }
 
+    pub fn write_storage_buffer(mut self, binding: u32, buffer: &'a Buffer) -> Self {
+        self.written_dependencies
+            .push(buffer.create_dep().into_generic_weak());
+
+        self.writes.push(DescriptorWrite {
+            binding,
+            vk_type: vk::DescriptorType::STORAGE_BUFFER,
+            write_type: DescriptorWriteType::Buffer { buffer },
+        });
+
+        self
+    }
+
     pub fn submit_writes(self) {
         self.descriptor_set.written_dependencies = self.written_dependencies;
 

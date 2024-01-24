@@ -1,6 +1,10 @@
 use crate::{
     engine::{
-        assets::{asset::Assets, loader::spirv::SpirVLoader, watched_shaders::WatchedShaders},
+        assets::{
+            asset::Assets,
+            loader::{obj::ObjLoader, spirv::SpirVLoader},
+            watched_shaders::WatchedShaders,
+        },
         common::time::Time,
         input::Input,
     },
@@ -10,6 +14,7 @@ use crate::{
 use super::app::App;
 
 mod graphics;
+mod world;
 
 pub fn setup_resources(app: &mut App) {
     app.resource_bank_mut().insert(Settings::default());
@@ -19,9 +24,13 @@ pub fn setup_resources(app: &mut App) {
     // Assets
     let mut assets = Assets::new();
     assets.add_loader::<SpirVLoader>();
+    assets.add_loader::<ObjLoader>();
     app.resource_bank_mut().insert(assets);
 
     // Graphics
     app.resource_bank_mut().insert(WatchedShaders::new());
     graphics::setup_graphical_resources(app);
+
+    // World
+    world::setup_world_resources(app);
 }
