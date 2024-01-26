@@ -1,8 +1,8 @@
 #version 450
 
-#include "lib/voxel.glsl"
-
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+#include "lib/types/voxel.glsl"
 
 layout (set = 0, binding = 0, rgba8) uniform image2D img_output;
 layout (set = 0, binding = 1) uniform Camera {
@@ -14,10 +14,25 @@ layout (set = 0, binding = 1) uniform Camera {
   float aspect;
   vec3 position;
 } camera;
-layout (set = 0, binding = 2) buffer voxel_ssbo {
-  uint num_length;
-  VoxelData voxels[];
+
+layout (set = 0, binding = 2, std430) buffer VoxelNodeSSBO {
+  uint voxel_node_len;
+  VoxelNode voxel_nodes[];
 };
+
+layout (set = 0, binding = 3, std430) buffer VoxelDataSSBO {
+  uint voxel_data_len;
+  VoxelData voxel_data[];
+};
+layout (set = 0, binding = 4) uniform VoxelInfo {
+  vec3 bbmin;
+  vec3 bbmax;
+  float unit_length;
+  uint grid_length;
+} voxel_info;
+
+#include "lib/morton.glsl"
+#include "lib/voxel.glsl"
 
 vec4 calculate_lighting(vec3 p, vec3 n, vec3 rd) {
   const vec3 LIGHT_POS = vec3(2.0, 2.0, 2.0);
@@ -30,31 +45,23 @@ vec4 calculate_lighting(vec3 p, vec3 n, vec3 rd) {
 }
 
 vec4 ray_march(vec3 ro, vec3 rd) {
-  float t = 0.0;
-  const int MAX_STEPS = 32;
-  const float MAX_DIST = 100.0;
-  const float HIT_DIST = 0.001;
+  vec3 t0 = (vec3(0, 0, 0) - ro) / rd;
+  vec3 t1 = (vec3(2, 2, 2) - ro) / rd;
+  vec3 tmin = min(t0, t1);
+  vec3 tmax = max(t0, t1);
+  vec2 traverse = max(tmin.xx, tmin.yz);
+  float tenter = max(traverse.x, traverse.y);
+  traverse = min(tmax.xx, tmax.yz);
+  float texit = min(traverse.x, traverse.y);
+  vec3 box = vec3(float(texit > max(tenter, 0.0)), tenter, texit);
 
-  const vec3 SPHERE_CENTER = vec3(0.0, 0.0, 5.0);
-  const float SPHERE_RADIUS = 1.0;
-
-  for(int i = 0; i < MAX_STEPS; i++) {
-    vec3 p = ro + rd * t;
-    float d = distance_to_sphere(p, SPHERE_CENTER, SPHERE_RADIUS);
-
-    if(d < HIT_DIST) {
-      vec3 n = normalize(p - SPHERE_CENTER);
-
-      return calculate_lighting(p, n, rd);
-    }
-    if(t > MAX_DIST) {
-      break;
-    }
-
-    t += d;
+  if(box.x == 0.0) {
+    return vec4(0.0, 0.0, 0.0, 1.0);
   }
 
-  return vec4(0.0, 0.0, 0.0, 1.0);
+  ro += tenter * rd;
+
+  return vec4(1.0, 0.0, 0.0, 1.0);
 }
 
 void main() {

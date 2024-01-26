@@ -51,6 +51,21 @@ impl SVONode {
 pub struct VoxelSVO {
     nodes: Vec<SVONode>,
     material: Vec<VoxelMaterial>,
+    unit_length: f32,
+}
+
+impl VoxelSVO {
+    pub fn nodes(&self) -> &[SVONode] {
+        &self.nodes
+    }
+
+    pub fn materials(&self) -> &[VoxelMaterial] {
+        &self.material
+    }
+
+    pub fn unit_length(&self) -> f32 {
+        self.unit_length
+    }
 }
 
 pub struct VoxelSVOBuilder {
@@ -143,7 +158,7 @@ impl VoxelSVOBuilder {
         parent
     }
 
-    pub fn finalize_svo(mut self) -> VoxelSVO {
+    pub fn finalize_svo(mut self, unit_length: f32) -> VoxelSVO {
         let final_mortan_code = 8u32.pow(self.max_depth);
 
         // Fill in empty voxels
@@ -155,6 +170,7 @@ impl VoxelSVOBuilder {
         VoxelSVO {
             nodes: self.svo_nodes,
             material: Vec::new(),
+            unit_length,
         }
     }
 
@@ -168,23 +184,5 @@ impl VoxelSVOBuilder {
     fn add_empty_voxel(&mut self, depth: u32) {
         self.buffers[depth as usize].push(SVONode::empty());
         self.refine_buffers();
-    }
-
-    // Gets the smallest power of 8 that fits in size,
-    fn get_pow_8(size: usize) -> u32 {
-        if size == 0 {
-            return 0;
-        }
-
-        let mut pow = 1;
-        let mut current = size;
-        println!("Size: {}", size);
-        while current != 0 {
-            println!("Current: {}", current);
-            current >>= 1;
-            pow += 1;
-        }
-
-        pow / 3
     }
 }

@@ -100,40 +100,33 @@ impl Voxelizer {
         let mut voxel_data: Vec<VoxelData> = Vec::new();
         let mut voxel_marker = vec![0 as u8; morton_count as usize];
 
-        let unit_length = (self.reader.bbox.1 - self.reader.bbox.0)
-            .map(|x| x / self.grid_length as f32)
-            .x;
+        let bbox = self.reader.bbox;
+        let max_length = Vector3::new(
+            bbox.1.x - bbox.0.x,
+            bbox.1.y - bbox.0.y,
+            bbox.1.z - bbox.0.z,
+        )
+        .abs()
+        .max();
+        let unit_length = self.grid_length as f32 / max_length;
         let inv_unit_length = 1.0 / unit_length;
 
-        let mut count = 0;
         while self.reader.has_next() {
             let triangle = self.reader.next().unwrap();
 
-            let mut min = Vector3::new(
-                triangle.v1.x.min(triangle.v2.x).min(triangle.v3.x),
-                triangle.v1.y.min(triangle.v2.y).min(triangle.v3.y),
-                triangle.v1.z.min(triangle.v2.z).min(triangle.v3.z),
+            let local_min = Vector3::new(
+                triangle.v1.x.min(triangle.v2.x.min(triangle.v3.x)) - bbox.0.x,
+                triangle.v1.y.min(triangle.v2.y.min(triangle.v3.y)) - bbox.0.y,
+                triangle.v1.z.min(triangle.v2.z.min(triangle.v3.z)) - bbox.0.z,
             );
-            let mut max = Vector3::new(
-                triangle.v1.x.max(triangle.v2.x).max(triangle.v3.x),
-                triangle.v1.y.max(triangle.v2.y).max(triangle.v3.y),
-                triangle.v1.z.max(triangle.v2.z).max(triangle.v3.z),
-            );
-
-            let mut min_grid = Vector3::new(
-                (self.reader.bbox.0.x * inv_unit_length).floor() as u32,
-                (self.reader.bbox.0.y * inv_unit_length).floor() as u32,
-                (self.reader.bbox.0.z * inv_unit_length).floor() as u32,
-            );
-            let mut max_grid = Vector3::new(
-                (self.reader.bbox.1.x * inv_unit_length).floor() as u32,
-                (self.reader.bbox.1.y * inv_unit_length).floor() as u32,
-                (self.reader.bbox.1.z * inv_unit_length).floor() as u32,
+            let local_max = Vector3::new(
+                bbox.1.x - triangle.v1.x.max(triangle.v2.x.max(triangle.v3.x)),
+                bbox.1.y - triangle.v1.y.max(triangle.v2.y.max(triangle.v3.y)),
+                bbox.1.z - triangle.v1.z.max(triangle.v2.z.max(triangle.v3.z)),
             );
 
-            // Clamp to grid
-            min_grid = min_grid.map(|x| x.max(0));
-            max_grid = max_grid.map(|x| x.min(self.grid_length - 1));
+            let min_grid = (local_min * unit_length).map(|x| x.floor() as u32);
+            let max_grid = (local_max * unit_length).map(|x| x.ceil() as u32);
 
             // Iterate through triangle grid voxels
             for x in min_grid.x..max_grid.x {
@@ -148,7 +141,10 @@ impl Voxelizer {
 
                         let point = Vector3::new(x as f32, y as f32, z as f32) * unit_length;
 
-                        if true {
+                        let is_intersecting = true;
+                        // TODO - clacualte the triangle aabb intersection
+
+                        if is_intersecting {
                             let normal = triangle.v1.cross(&(triangle.v2 - triangle.v1));
 
                             voxel_marker[index as usize] = 1;
@@ -160,8 +156,6 @@ impl Voxelizer {
                     }
                 }
             }
-
-            count += 1;
         }
 
         // Sort voxel data by morton code and build svo
@@ -170,6 +164,6 @@ impl Voxelizer {
         let mut builder = VoxelSVOBuilder::new(self.grid_length as usize);
         voxel_data.iter().for_each(|x| builder.add_voxel(x.clone()));
 
-        builder.finalize_svo()
+        builder.finalize_svo(unit_length)
     }
 }

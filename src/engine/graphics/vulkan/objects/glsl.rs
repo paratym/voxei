@@ -20,6 +20,27 @@ impl GlslType for GlslFloat {
 }
 
 #[derive(Default, Debug, Copy, Clone)]
+pub struct GlslUInt {
+    pub val: u32,
+}
+
+impl GlslUInt {
+    pub fn new(val: u32) -> Self {
+        Self { val }
+    }
+}
+
+impl GlslType for GlslUInt {
+    fn size() -> usize {
+        std::mem::size_of::<u32>()
+    }
+
+    fn alignment() -> usize {
+        std::mem::align_of::<u32>()
+    }
+}
+
+#[derive(Default, Debug, Copy, Clone)]
 pub struct GlslVec2f {
     pub x: f32,
     pub y: f32,

@@ -94,6 +94,18 @@ impl CommandBuffer {
                 self.recorded_dependencies
                     .push(descriptor_pool.create_dep().into_generic_weak());
 
+                self.recorded_dependencies.extend(
+                    descriptor_pool
+                        .get_multiple(descriptor_set_handles.clone())
+                        .iter()
+                        .flat_map(|set| {
+                            set.written_dependencies()
+                                .into_iter()
+                                .map(|dep| dep.clone())
+                        })
+                        .collect::<Vec<_>>(),
+                );
+
                 descriptor_pool
                     .get_multiple(descriptor_set_handles)
                     .into_iter()

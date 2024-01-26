@@ -101,7 +101,6 @@ impl PrimaryCamera {
         let mut speed = 1.0;
         let mut delta = Vector3::new(0.0, 0.0, 0.0);
         if input.is_key_down(Key::W) {
-            println!("W");
             delta += forward;
         }
         if input.is_key_down(Key::S) {

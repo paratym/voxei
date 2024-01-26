@@ -35,3 +35,9 @@ impl std::ops::DerefMut for DefaultQueueExecutor {
         &mut self.executor
     }
 }
+
+impl Drop for DefaultQueueExecutor {
+    fn drop(&mut self) {
+        self.executor.wait_idle();
+    }
+}

@@ -30,7 +30,7 @@ use crate::{
     },
     game::{
         graphics::{gfx_constants, pipeline::util as pipeline_util},
-        world::terrain::Terrain,
+        world::{sponza::Sponza, terrain::Terrain},
     },
 };
 
@@ -44,6 +44,7 @@ pub struct VoxelRenderPass {
     shader_signal: DependencySignal,
     descriptor_set_layout: DescriptorSetLayout,
     main_uniform_buffers: [Buffer; constants::FRAMES_IN_FLIGHT],
+    wrote_sponza: bool,
 }
 
 impl VoxelRenderPass {
@@ -80,6 +81,18 @@ impl VoxelRenderPass {
             1,
             vk::ShaderStageFlags::COMPUTE,
         );
+        descriptor_set_layout.add_binding(
+            3,
+            vk::DescriptorType::STORAGE_BUFFER,
+            1,
+            vk::ShaderStageFlags::COMPUTE,
+        );
+        descriptor_set_layout.add_binding(
+            4,
+            vk::DescriptorType::UNIFORM_BUFFER,
+            1,
+            vk::ShaderStageFlags::COMPUTE,
+        );
         let descriptor_set_layout = descriptor_set_layout.build(vulkan);
 
         let main_uniform_buffers = (0..2)
@@ -105,6 +118,7 @@ impl VoxelRenderPass {
             shader_signal,
             descriptor_set_layout,
             main_uniform_buffers,
+            wrote_sponza: false,
         }
     }
 
@@ -116,6 +130,7 @@ impl VoxelRenderPass {
         frame_index: Res<FrameIndex>,
         primary_camera: Res<PrimaryCamera>,
         terrain: Res<Terrain>,
+        sponza: Res<Sponza>,
     ) {
         if watched_shaders.is_dependency_signaled(&voxel_pass.shader_signal) {
             let shader_code = watched_shaders
@@ -145,14 +160,22 @@ impl VoxelRenderPass {
                 frame_index.index(),
             )
             .unwrap();
-        descriptor_set
+        let mut d_writer = descriptor_set
             .writer(&vulkan)
             .write_storage_image(0, backbuffer_image, vk::ImageLayout::GENERAL)
             .write_uniform_buffer(
                 1,
                 primary_camera.camera().uniform_buffer(frame_index.index()),
-            )
-            .submit_writes();
+            );
+
+        if sponza.is_ready() {
+            voxel_pass.wrote_sponza = true;
+            d_writer = d_writer.write_storage_buffer(2, sponza.gpu_nodes().unwrap());
+            d_writer = d_writer.write_storage_buffer(3, sponza.gpu_materials().unwrap());
+            d_writer = d_writer.write_uniform_buffer(4, sponza.info().unwrap());
+        }
+
+        d_writer.submit_writes();
 
         // Update uniform buffers
         let map_ptr = voxel_pass.main_uniform_buffers[frame_index.index()]
@@ -203,6 +226,11 @@ impl VoxelRenderPass {
                 image: backbuffer_image,
             }],
         );
+
+        // Don't continue if we don't have the sponza model loaded in our descriptor sets yet
+        if !voxel_pass.wrote_sponza {
+            return;
+        }
 
         main_command_buffer.bind_compute_pipeline(voxel_pass.compute_pipeline());
 
