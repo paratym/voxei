@@ -109,12 +109,10 @@ impl Sponza {
             let info_ptr = info.instance().allocation().instance().map_memory(0) as *mut u8;
 
             let mut writer = GlslDataBuilder::new();
-            writer.push(GlslVec3f::new(bbox.0.x, bbox.0.y, bbox.0.z));
-            writer.push(GlslVec3f::new(bbox.1.x, bbox.1.y, bbox.1.z));
+            writer.push(GlslVec3f::new(0.0, 0.0, 0.0));
+            writer.push(GlslVec3f::new(2.0, 2.0, 2.0));
             println!("Bbox: {:?}", bbox);
-            writer.push(GlslFloat::new(
-                sponza.voxelized_octree.as_ref().unwrap().unit_length(),
-            ));
+            writer.push(GlslFloat::new(2.0 / grid_length as f32));
             writer.push(GlslUInt::new(grid_length as u32));
             let data = writer.build();
 

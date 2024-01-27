@@ -1,5 +1,5 @@
 use ash::vk;
-use nalgebra::{Translation3, Vector3};
+use nalgebra::{Translation, Translation3, Vector3};
 use voxei_macros::Resource;
 
 use crate::constants;
@@ -40,7 +40,8 @@ pub struct PrimaryCamera {
 
 impl PrimaryCamera {
     pub fn new(vulkan: &Vulkan, vulkan_memory_allocator: &mut VulkanMemoryAllocator) -> Self {
-        let transform = Transform::new();
+        let mut transform = Transform::new();
+        transform.isometry.translation.vector = Vector3::new(0.5, 1.5, -3.0);
 
         Self {
             camera: Camera::new(vulkan, vulkan_memory_allocator),
