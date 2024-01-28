@@ -112,6 +112,21 @@ vec3 get_child_position(vec3 parent_pos, uint child_local_morton, uint child_dep
   return parent_pos + (child_mask * half_length);
 }
 
+uint get_child_node_index(uint parent_node_index, uint child_local_morton) {
+  VoxelNode parent_node = voxel_nodes[parent_node_index];
+  uint child_node_index = parent_node.child_index;
+  if(child_node_index == 0) {
+    return 0;
+  }
+  uint grouped_child_offset = parent_node.child_offsets[child_local_morton / 4];
+  // Since the offset is stored as 2xu32, we need to interpret it as 8xu8 
+  uint child_offset = (grouped_child_offset >> ((child_local_morton % 4) * 8)) & 0xFF;
+  if(child_offset == 255) {
+    return 0;
+  }
+  return child_node_index + child_offset;
+}
+
 struct TraceOutput {
   bool hit;
   vec3 pos;
@@ -133,14 +148,45 @@ TraceOutput trace(Ray ray, out vec3 pos) {
   vec3 first_child_pos = get_child_position(root_pos, first_child_local_morton, 1);
 
   vec3 color = vec3(0.3);
-  if((first_child_local_morton & 1) > 0) {
-    color.x = 1;
-  }
-  if((first_child_local_morton & 2) > 0) {
-    color.y = 1;
-  }
-  if((first_child_local_morton & 4) > 0) {
-    color.z = 1;
+
+  uint depth = 1u;
+  pos = first_child_pos;
+  uint local_morton = first_child_local_morton;
+  uint parent_node_index = voxel_node_len - 1;
+  float t_exit = root_t_corners.y;
+  for(uint i = 0; i < 128; i++) {
+    // Calculate the intersection of the ray with the current voxel
+    vec2 tc = ray_voxel_intersection(ray, pos, depth);
+    bool hit = tc.y > max(tc.x, 0.0);
+
+    // Visualization
+    color += vec3(0.1);
+
+    if(hit) {
+      // Check if the voxel is a leaf
+      uint node_index = get_child_node_index(parent_node_index, local_morton);
+      if(node_index != 0) {
+        VoxelNode child = voxel_nodes[node_index];
+        if(depth == SUBDIVISIONS) {
+          color = vec3(1.0, 0.0, 0.0);
+          break;
+        }
+
+        if(child.data_index != 0) {
+          // We have hit a leaf node
+          color = vec3(1.0);
+          break;
+        }
+
+        parent_node_index = node_index;
+        vec3 t_mid = (pos - ray.origin) * ray.inv_dir;
+        local_morton = get_child_local_morton(ray, t_mid, tc);
+        pos = get_child_position(pos, local_morton, depth);
+        depth++;
+      }
+    } else {
+      break;
+    }
   }
 
   return TraceOutput(true, vec3(0.0), color);

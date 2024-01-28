@@ -1,6 +1,6 @@
 pub type MortonCode = u32;
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct VoxelData {
     pub morton_code: MortonCode,
     pub normal: [f32; 3],
@@ -19,32 +19,34 @@ pub struct VoxelMaterial {
     pub normal: [f32; 3],
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct SVONode {
     pub data_index: usize,
     pub children_base_index: usize,
     pub children_offset: [u8; 8],
 }
 
+pub const SVO_NODE_NULL_OFFSET: u8 = u8::MAX;
+
 impl SVONode {
     pub fn empty() -> Self {
         Self {
             data_index: 0,
             children_base_index: 0,
-            children_offset: [u8::MAX; 8],
+            children_offset: [SVO_NODE_NULL_OFFSET; 8],
         }
     }
 
     pub fn has_data(&self) -> bool {
-        self.data_index == 0
+        self.data_index != 0
     }
 
-    pub fn is_leaf(&self) -> bool {
-        self.children_base_index == 0
+    pub fn has_children(&self) -> bool {
+        self.children_base_index != 0
     }
 
     pub fn is_null(&self) -> bool {
-        !self.has_data() && self.is_leaf()
+        !(self.has_data() || self.has_children())
     }
 }
 
@@ -81,22 +83,32 @@ impl VoxelSVOBuilder {
     pub fn new(grid_length: usize) -> Self {
         let max_depth = (grid_length as f32).log2().ceil() as u32;
 
-        let buffers = vec![vec![SVONode::empty(); 8]; max_depth as usize + 1];
+        let buffers = vec![vec![]; max_depth as usize + 1];
+
+        let nodes = vec![SVONode::empty()];
+        let data = vec![VoxelData::empty()];
 
         Self {
             current_morton_code: 0,
             max_depth,
             buffers,
-            svo_nodes: Vec::new(),
-            svo_data: Vec::new(),
+            svo_nodes: nodes,
+            svo_data: data,
         }
     }
 
     pub fn add_voxel(&mut self, data: VoxelData) {
+        println!("Adding voxel: {:?}", data);
         // Fill in empty voxels
         if data.morton_code > self.current_morton_code {
             self.fill_empty_voxels((data.morton_code - self.current_morton_code) as usize);
         }
+        self.current_morton_code = data.morton_code + 1;
+        println!("Filled empty voxels");
+        println!(
+            "buffers: {:?}",
+            self.buffers.iter().map(|b| b.len()).collect::<Vec<_>>()
+        );
 
         // Add voxel data
         self.svo_data.push(data);
@@ -105,7 +117,7 @@ impl VoxelSVOBuilder {
         let node = SVONode {
             data_index: self.svo_data.len() - 1,
             children_base_index: 0,
-            children_offset: [0; 8],
+            children_offset: [SVO_NODE_NULL_OFFSET; 8],
         };
         self.buffers[(self.max_depth) as usize].push(node);
 
@@ -120,7 +132,7 @@ impl VoxelSVOBuilder {
             if self.buffers[depth as usize].len() == 8 {
                 let is_buffer_empty = self.buffers[depth as usize]
                     .iter()
-                    .all(|node| node.data_index == 0);
+                    .all(|node| node.is_null());
 
                 if is_buffer_empty {
                     self.buffers[depth - 1].push(SVONode::empty());
@@ -128,6 +140,8 @@ impl VoxelSVOBuilder {
                     let node = self.group_buffer(depth);
                     self.buffers[depth - 1].push(node);
                 }
+
+                self.buffers[depth as usize].clear();
             } else {
                 break;
             }
@@ -175,6 +189,7 @@ impl VoxelSVOBuilder {
     }
 
     fn fill_empty_voxels(&mut self, mut size: usize) {
+        println!("Filling empty voxels: {}", size);
         while size > 0 {
             self.add_empty_voxel(self.max_depth);
             size -= 1;

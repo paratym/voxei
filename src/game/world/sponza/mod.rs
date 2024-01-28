@@ -83,7 +83,7 @@ impl Sponza {
             );
 
             let material_count = sponza.voxelized_octree.as_ref().unwrap().materials().len();
-            let size = size_of::<u64>() + (size_of::<f32>() * 3) * material_count;
+            let size = size_of::<u64>() + (size_of::<f32>() * 4) * material_count;
             let gpu_materials = Buffer::new(
                 &vulkan,
                 &mut vulkan_memory_allocator,
@@ -123,6 +123,7 @@ impl Sponza {
             // Copy svo data to gpu
             let mut node_ptr =
                 gpu_nodes.instance().allocation().instance().map_memory(0) as *mut u32;
+            println!("Node count: {}", node_count);
             unsafe { node_ptr.write(node_count as u32) };
             node_ptr = unsafe { node_ptr.add(1) };
 
@@ -159,7 +160,7 @@ impl Sponza {
                     mat_ptr.write(mat.normal[1]);
                     mat_ptr = mat_ptr.add(1);
                     mat_ptr.write(mat.normal[2]);
-                    mat_ptr = mat_ptr.add(1);
+                    mat_ptr = mat_ptr.add(2);
                 }
             }
 

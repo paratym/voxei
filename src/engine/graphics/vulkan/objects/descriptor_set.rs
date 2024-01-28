@@ -297,10 +297,16 @@ impl DescriptorSetPool {
         let descriptor_pool_sizes = [
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::UNIFORM_BUFFER)
-                .descriptor_count(100),
+                .descriptor_count(10),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(100),
+                .descriptor_count(10),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_IMAGE)
+                .descriptor_count(10),
+            vk::DescriptorPoolSize::default()
+                .ty(vk::DescriptorType::STORAGE_BUFFER)
+                .descriptor_count(10),
         ];
 
         let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo::default()
