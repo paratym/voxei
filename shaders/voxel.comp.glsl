@@ -62,17 +62,44 @@ vec2 ray_voxel_intersection(Ray ray, vec3 pos, uint depth) {
 
 // Returns the 3 digit morton code for the child voxel local position
 // ray - the ray to test the direction of
-// tmid - the t value of the middle of the voxel
+// tmid - the t values of the voxels axes planes intersected by the ray
 // tc - the t values of the entry and exit of the parent voxel
 uint get_child_local_morton(Ray ray, vec3 tmid, vec2 tc) {
   uint i = 0;
-  if(tmid.x > tc.x) {
-    i |= 1;
+  // X
+  if (tmid.x <= tc.x) {
+    if (ray.dir.x > 0.0) {
+      i |= 1;
+    }
+  } else {
+    if (ray.dir.x < 0.0) {
+      i |= 1;
+    }
   }
-  if(tmid.y > tc.x) {
-    i |= 2;
+
+  // Y 
+  if (tmid.y <= tc.x) {
+    if (ray.dir.y < 0.0) {
+      i |= 2;
+    }
+  } else {
+    if (ray.dir.y > 0.0) {
+      i |= 2;
+    }
+  }
+
+  // Z
+  if (tmid.z <= tc.x) {
+    if (ray.dir.z < 0.0) {
+      i |= 4;
+    }
+  } else {
+    if (ray.dir.z > 0.0) {
+      i |= 4;
+    }
   }
   return i;
+
 }
 
 vec3 get_child_position(vec3 parent_pos, uint child_local_morton, uint child_depth) {
@@ -107,13 +134,14 @@ TraceOutput trace(Ray ray, out vec3 pos) {
 
   vec3 color = vec3(0.3);
   if((first_child_local_morton & 1) > 0) {
-    color = vec3(1.0, 0.0, 0.0);
-  } else if((first_child_local_morton & 2) > 0) {
-    color = vec3(0.0, 1.0, 0.0);
-  } else if((first_child_local_morton & 4) > 0) {
-    color = vec3(0.0, 0.0, 1.0);
+    color.x = 1;
   }
-  color = vec3(root_t_corners.x / 5, 0.0, root_t_corners.y / 5);
+  if((first_child_local_morton & 2) > 0) {
+    color.y = 1;
+  }
+  if((first_child_local_morton & 4) > 0) {
+    color.z = 1;
+  }
 
   return TraceOutput(true, vec3(0.0), color);
 }
