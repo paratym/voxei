@@ -155,14 +155,8 @@ impl Voxelizer {
                 )
             };
 
-            println!("local_min: {:?}", local_min);
-            println!("local_max: {:?}", local_max);
-
             let mut min_grid = map_to_grid(local_min);
             let mut max_grid = map_to_grid(local_max);
-
-            println!("min_grid: {:?}", min_grid);
-            println!("max_grid: {:?}", max_grid);
 
             // Since we flipped the y and z axis, we need to swap the min and max if there are now in the wrong order for the loops
             if min_grid.y > max_grid.y {
@@ -172,7 +166,9 @@ impl Voxelizer {
                 std::mem::swap(&mut min_grid.z, &mut max_grid.z);
             }
 
-            let normal = triangle.v1.cross(&(triangle.v2 - triangle.v1));
+            let normal = (triangle.v2 - triangle.v1)
+                .cross(&(triangle.v3 - triangle.v1))
+                .normalize();
 
             // Iterate through triangle grid voxels
             for x in min_grid.x..=max_grid.x {
@@ -196,7 +192,7 @@ impl Voxelizer {
                             voxel_marker[index as usize] = 1;
                             voxel_data.push(VoxelData {
                                 morton_code: index,
-                                normal: normal.normalize().into(),
+                                normal: normal.into(),
                             });
                         }
                     }
@@ -211,12 +207,11 @@ impl Voxelizer {
         let mut builder = VoxelSVOBuilder::new(self.grid_length as usize);
         voxel_data.iter().for_each(|x| builder.add_voxel(x.clone()));
 
-        let tri_bbox_mid = (bbox.0 + bbox.1) / 2.0;
-        let scaled_half_max_length =
-            Vector3::new(max_length / 2.0, max_length / 2.0, max_length / 2.0) * scale;
+        let translation = position - bbox.0;
+        let scaled_max_length = max_length * scale;
         let square_bbox = (
-            tri_bbox_mid - scaled_half_max_length,
-            tri_bbox_mid + scaled_half_max_length,
+            position,
+            position + Vector3::new(scaled_max_length, scaled_max_length, scaled_max_length),
         );
         VoxelizedData {
             svo: builder.finalize_svo(unit_length),

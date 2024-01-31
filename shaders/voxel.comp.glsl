@@ -179,11 +179,11 @@ TraceOutput trace(Ray ray) {
       if(node_index != 0 && !dont_push) {
         VoxelNode child = voxel_nodes[node_index];
         if (child.data_index != 0) {
-          const vec3 LIGHT_POS = vec3(20.0, 50.0, 20);
+          const vec3 LIGHT_POS = vec3(0.0, 100.0, 0);
           vec3 n = voxel_data[child.data_index].normal;
-          vec3 p = ray.origin + tc.x * ray.dir;
+          vec3 p = pos;
           vec3 p_to_light = normalize(LIGHT_POS - p);
-          color = max(dot(n, p_to_light), 0.05) * vec3(0.8, 0.4, 0.2);
+          color = max(dot(n, p_to_light), 0.1) * vec3(0.8, 0.4, 0.2);
           break;
         }
 
