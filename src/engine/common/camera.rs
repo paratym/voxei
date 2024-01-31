@@ -125,7 +125,7 @@ impl PrimaryCamera {
             delta -= up;
         }
         if input.is_key_down(Key::LControl) {
-            speed = 5.0;
+            speed = 10.0;
         }
 
         transform.isometry.translation.vector += delta * speed * time.delta_time().as_secs_f32();

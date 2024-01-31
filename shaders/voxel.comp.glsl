@@ -32,7 +32,7 @@ layout (set = 0, binding = 4) uniform VoxelInfo {
   uint grid_length;
 } voxel_info;
 
-const uint SUBDIVISIONS = 3;
+const uint SUBDIVISIONS = 6;
 
 #include "lib/morton.glsl"
 #include "lib/voxel.glsl"
@@ -140,9 +140,12 @@ struct StackItem {
 
 TraceOutput trace(Ray ray) {
   vec2 root_t_corners = ray_box_intersection(ray, voxel_info.bbmin, voxel_info.bbmax);
-  bool hit = root_t_corners.y > max(root_t_corners.x, 0.0);
+  // If the ray starts inside the svo, have the tenter be 0 since this seems to work
+  root_t_corners.x = max(root_t_corners.x, 0.0);
+  bool hit = root_t_corners.y >= root_t_corners.x;
+  vec3 color = vec3(0.1, 0.33, 0.58);
   if(!hit) {
-    return TraceOutput(false, vec3(0.0), vec3(0.0));
+    return TraceOutput(false, vec3(0.0), color);
   }
 
   VoxelNode parent_node = voxel_nodes[voxel_node_len - 1];
@@ -161,20 +164,26 @@ TraceOutput trace(Ray ray) {
   uint stack_ptr = 0;
 
   bool dont_push = false;
-  vec3 color = vec3(0.2);
   float h = root_t_corners.y;
-  for(uint i = 0; i < 128; i++) {
+  for(uint i = 0; i < 1024; i++) {
     // Calculate the intersection of the ray with the current voxel
     vec3 tmin, tmax;
     vec2 tc = ray_voxel_intersection(ray, pos, depth, tmin, tmax);
-    bool hit = tc.y > max(tc.x, 0.0);
+    tc.x = max(tc.x, 0.0);
+    bool hit = tc.y >= tc.x;
     uint local_morton = morton & 7;
+
+
     if(hit) {
       uint node_index = get_child_node_index(parent_node_index, local_morton);
       if(node_index != 0 && !dont_push) {
         VoxelNode child = voxel_nodes[node_index];
         if (child.data_index != 0) {
-          color = vec3(0.0, 0.5, 0.0);
+          const vec3 LIGHT_POS = vec3(20.0, 50.0, 20);
+          vec3 n = voxel_data[child.data_index].normal;
+          vec3 p = ray.origin + tc.x * ray.dir;
+          vec3 p_to_light = normalize(LIGHT_POS - p);
+          color = max(dot(n, p_to_light), 0.05) * vec3(0.8, 0.4, 0.2);
           break;
         }
 
@@ -189,7 +198,6 @@ TraceOutput trace(Ray ray) {
         continue;
       }
     } else {
-      break;
     }
 
     // We no longer have a valid child node so we are in empty space and need to advance
@@ -272,7 +280,7 @@ TraceOutput trace(Ray ray) {
     }
   }
 
-  return TraceOutput(true, vec3(0.0), color);
+  return TraceOutput(false, vec3(0.0), color);
 }
 
 void main() {
@@ -290,11 +298,5 @@ void main() {
 
   TraceOutput trace_out = trace(Ray(ro, rd, 1.0 / rd));
 
-  vec4 color = vec4(0.0, 0.0, 0.0, 1.0);
-
-  if(trace_out.hit) {
-    color = vec4(trace_out.color, 1.0);
-  }
-  
-  imageStore(img_output, ivec2(coord), color);
+  imageStore(img_output, ivec2(coord), vec4(trace_out.color, 1.0));
 }

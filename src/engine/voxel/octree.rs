@@ -98,17 +98,11 @@ impl VoxelSVOBuilder {
     }
 
     pub fn add_voxel(&mut self, data: VoxelData) {
-        println!("Adding voxel: {:?}", data);
         // Fill in empty voxels
         if data.morton_code > self.current_morton_code {
             self.fill_empty_voxels((data.morton_code - self.current_morton_code) as usize);
         }
         self.current_morton_code = data.morton_code + 1;
-        println!("Filled empty voxels");
-        println!(
-            "buffers: {:?}",
-            self.buffers.iter().map(|b| b.len()).collect::<Vec<_>>()
-        );
 
         // Add voxel data
         self.svo_data.push(data);
@@ -183,13 +177,16 @@ impl VoxelSVOBuilder {
 
         VoxelSVO {
             nodes: self.svo_nodes,
-            material: Vec::new(),
+            material: self
+                .svo_data
+                .into_iter()
+                .map(|x| VoxelMaterial { normal: x.normal })
+                .collect(),
             unit_length,
         }
     }
 
     fn fill_empty_voxels(&mut self, mut size: usize) {
-        println!("Filling empty voxels: {}", size);
         while size > 0 {
             self.add_empty_voxel(self.max_depth);
             size -= 1;

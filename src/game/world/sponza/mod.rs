@@ -21,8 +21,8 @@ use crate::engine::{
     },
 };
 
-pub const SPONZA_ASSET_PATH: &str = "assets/sponza/sponza.obj";
-pub const SUBDIVISIONS: u32 = 3;
+pub const SPONZA_ASSET_PATH: &str = "assets/bunny.obj";
+pub const SUBDIVISIONS: u32 = 6;
 
 #[derive(Resource)]
 pub struct Sponza {
@@ -61,28 +61,25 @@ impl Sponza {
 
         if sponza.voxelized_octree.is_none() && handle.is_loaded() {
             println!("Sponza loaded");
+            let models = vec![tobj::Model {
+                mesh: tobj::Mesh {
+                    // triangle vertical
+                    positions: vec![0.002, 0.00, 0.004, 0.002, 0.0, 0.004, 0.0, 0.002, 0.004],
+                    indices: vec![0, 1, 2],
+                    ..Default::default()
+                },
+                name: "model".to_owned(),
+            }];
+            let reader = TriReader::new(&models);
             let reader = TriReader::new(&handle.get().unwrap());
-            let reader = TriReader {
-                triangles: vec![
-                    Triangle::new(
-                        Vector3::new(0.0, 0.0, 1.0),
-                        Vector3::new(2.0, 0.0, 1.0),
-                        Vector3::new(0.0, 0.0, 1.0),
-                    ),
-                    Triangle::new(
-                        Vector3::new(1.0, 0.0, 1.0),
-                        Vector3::new(1.0, 2.0, 1.0),
-                        Vector3::new(1.0, 0.0, 1.0),
-                    ),
-                ],
-                bbox: (Vector3::new(0.0, 0.0, 0.0), Vector3::new(2.0, 2.0, 2.0)),
-            };
             let grid_length = 1 << SUBDIVISIONS;
-            let bbox = reader.bbox.clone();
 
             println!("Voxelizing Sponza with grid length {}", grid_length);
             let voxelizer = Voxelizer::new(reader, grid_length);
-            sponza.voxelized_octree = Some(voxelizer.voxelize());
+            let voxel_data = voxelizer.voxelize(Vector3::new(0.0, 0.0, 0.0), 100.0);
+            let unit_length = voxel_data.unit_length;
+            let bbox = voxel_data.bbox;
+            sponza.voxelized_octree = Some(voxel_data.svo);
             println!("Voxelized Sponza");
 
             let node_count = sponza.voxelized_octree.as_ref().unwrap().nodes().len();
@@ -100,6 +97,7 @@ impl Sponza {
 
             let material_count = sponza.voxelized_octree.as_ref().unwrap().materials().len();
             let size = size_of::<u64>() + (size_of::<f32>() * 4) * material_count;
+            println!("Material count: {}", material_count);
             let gpu_materials = Buffer::new(
                 &vulkan,
                 &mut vulkan_memory_allocator,
@@ -125,10 +123,10 @@ impl Sponza {
             let info_ptr = info.instance().allocation().instance().map_memory(0) as *mut u8;
 
             let mut writer = GlslDataBuilder::new();
-            writer.push(GlslVec3f::new(0.0, 0.0, 0.0));
-            writer.push(GlslVec3f::new(2.0, 2.0, 2.0));
+            writer.push(GlslVec3f::new(bbox.0.x, bbox.0.y, bbox.0.z));
+            writer.push(GlslVec3f::new(bbox.1.x, bbox.1.y, bbox.1.z));
             println!("Bbox: {:?}", bbox);
-            writer.push(GlslFloat::new(2.0 / grid_length as f32));
+            writer.push(GlslFloat::new(unit_length));
             writer.push(GlslUInt::new(grid_length as u32));
             let data = writer.build();
 

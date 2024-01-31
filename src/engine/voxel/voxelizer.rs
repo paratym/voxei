@@ -1,4 +1,4 @@
-use nalgebra::Vector3;
+use nalgebra::{Vector2, Vector3};
 
 use super::{
     morton,
@@ -47,16 +47,22 @@ impl TriReader {
                     mesh.positions[mesh.indices[i + 2] as usize * 3 + 2],
                 );
 
-                min = min.map(|x| x.min(v1.x.min(v2.x.min(v3.x))));
-                min = min.map(|x| x.min(v1.y.min(v2.y.min(v3.y))));
-                min = min.map(|x| x.min(v1.z.min(v2.z.min(v3.z))));
-                max = max.map(|x| x.max(v1.x.max(v2.x.max(v3.x))));
-                max = max.map(|x| x.max(v1.y.max(v2.y.max(v3.y))));
-                max = max.map(|x| x.max(v1.z.max(v2.z.max(v3.z))));
+                println!("v1: {:?}", v1);
+                min = Vector3::new(
+                    min.x.min(v1.x.min(v2.x.min(v3.x))),
+                    min.y.min(v1.y.min(v2.y.min(v3.y))),
+                    min.z.min(v1.z.min(v2.z.min(v3.z))),
+                );
+                max = Vector3::new(
+                    max.x.max(v1.x.max(v2.x.max(v3.x))),
+                    max.y.max(v1.y.max(v2.y.max(v3.y))),
+                    max.z.max(v1.z.max(v2.z.max(v3.z))),
+                );
 
                 triangles.push(Triangle { v1, v2, v3 });
             }
         }
+        println!("triangles: {:?}", triangles.len());
         Self {
             triangles,
             bbox: (min, max),
@@ -100,7 +106,7 @@ impl Voxelizer {
         }
     }
 
-    pub fn voxelize(mut self) -> VoxelSVO {
+    pub fn voxelize(mut self, position: Vector3<f32>, scale: f32) -> VoxelizedData {
         let morton_count = self.grid_length.pow(3);
 
         let mut voxel_data: Vec<VoxelData> = Vec::new();
@@ -114,10 +120,12 @@ impl Voxelizer {
         )
         .abs()
         .max();
-        // triangle local coordinate * unit_length = clamp(grid coordinate, 0, grid_length - 1)
-        let unit_length = self.grid_length as f32 / max_length;
-        let inv_unit_length = 1.0 / unit_length;
+        println!("bbox: {:?}", bbox);
+        println!("max_length: {:?}", max_length);
+        // The conversion from 1 voxel unit * unit_length = world space length
+        let unit_length = (1.0 / self.grid_length as f32) * max_length;
         println!("grid_length: {:?}", self.grid_length);
+        println!("unit_length: {:?}", unit_length);
 
         while self.reader.has_next() {
             let triangle = self.reader.next().unwrap();
@@ -126,16 +134,15 @@ impl Voxelizer {
                 triangle.v1.x.min(triangle.v2.x.min(triangle.v3.x)) - bbox.0.x,
                 triangle.v1.y.min(triangle.v2.y.min(triangle.v3.y)) - bbox.0.y,
                 triangle.v1.z.min(triangle.v2.z.min(triangle.v3.z)) - bbox.0.z,
-            ) / max_length;
+            );
             let local_max = Vector3::new(
                 triangle.v1.x.max(triangle.v2.x.max(triangle.v3.x)) - bbox.0.x,
                 triangle.v1.y.max(triangle.v2.y.max(triangle.v3.y)) - bbox.0.y,
                 triangle.v1.z.max(triangle.v2.z.max(triangle.v3.z)) - bbox.0.z,
-            ) / max_length;
+            );
 
             let map_to_grid = |vec: Vector3<f32>| -> Vector3<u32> {
-                let vec = vec * unit_length as f32;
-                println!("vec: {:?}", vec);
+                let vec = vec * (self.grid_length as f32 / max_length) as f32;
                 let vec = Vector3::new(
                     vec.x.floor().clamp(0.0, self.grid_length as f32 - 1.0) as u32,
                     vec.y.floor().clamp(0.0, self.grid_length as f32 - 1.0) as u32,
@@ -148,8 +155,14 @@ impl Voxelizer {
                 )
             };
 
+            println!("local_min: {:?}", local_min);
+            println!("local_max: {:?}", local_max);
+
             let mut min_grid = map_to_grid(local_min);
             let mut max_grid = map_to_grid(local_max);
+
+            println!("min_grid: {:?}", min_grid);
+            println!("max_grid: {:?}", max_grid);
 
             // Since we flipped the y and z axis, we need to swap the min and max if there are now in the wrong order for the loops
             if min_grid.y > max_grid.y {
@@ -159,42 +172,32 @@ impl Voxelizer {
                 std::mem::swap(&mut min_grid.z, &mut max_grid.z);
             }
 
-            println!("local_min: {:?}", local_min);
-            println!("local_max: {:?}", local_max);
-
-            println!("min_grid: {:?}", min_grid);
-            println!("max_grid: {:?}", max_grid);
+            let normal = triangle.v1.cross(&(triangle.v2 - triangle.v1));
 
             // Iterate through triangle grid voxels
             for x in min_grid.x..=max_grid.x {
-                println!("x: {}", x);
                 for y in min_grid.y..=max_grid.y {
-                    println!("y: {}", y);
                     for z in min_grid.z..=max_grid.z {
-                        println!("z: {}", z);
-
                         let index = morton::util::morton_encode(x, y, z);
 
-                        // Check if voxel is already marked
+                        let local_pos: Vector3<f32> = bbox.0
+                            + (Vector3::new(x, y, z).map(|x| x as f32 / self.grid_length as f32)
+                                * max_length);
+                        let local_max = local_pos.map(|x| x + unit_length);
+
                         if voxel_marker[index as usize] == 1 {
-                            println!("Voxel already marked");
                             continue;
                         }
-
-                        let point = Vector3::new(x as f32, y as f32, z as f32) * unit_length;
 
                         let is_intersecting = true;
                         // TODO - clacualte the triangle aabb intersection
 
                         if is_intersecting {
-                            let normal = triangle.v1.cross(&(triangle.v2 - triangle.v1));
-
                             voxel_marker[index as usize] = 1;
                             voxel_data.push(VoxelData {
                                 morton_code: index,
                                 normal: normal.normalize().into(),
                             });
-                            println!("Voxel: {:?}", point);
                         }
                     }
                 }
@@ -203,10 +206,28 @@ impl Voxelizer {
 
         // Sort voxel data by morton code and build svo
         voxel_data.sort_by(|a, b| a.morton_code.cmp(&b.morton_code));
+        println!("voxel_data: {:?}", voxel_data.len());
 
         let mut builder = VoxelSVOBuilder::new(self.grid_length as usize);
         voxel_data.iter().for_each(|x| builder.add_voxel(x.clone()));
 
-        builder.finalize_svo(unit_length)
+        let tri_bbox_mid = (bbox.0 + bbox.1) / 2.0;
+        let scaled_half_max_length =
+            Vector3::new(max_length / 2.0, max_length / 2.0, max_length / 2.0) * scale;
+        let square_bbox = (
+            tri_bbox_mid - scaled_half_max_length,
+            tri_bbox_mid + scaled_half_max_length,
+        );
+        VoxelizedData {
+            svo: builder.finalize_svo(unit_length),
+            bbox: square_bbox,
+            unit_length: unit_length * scale,
+        }
     }
+}
+
+pub struct VoxelizedData {
+    pub svo: VoxelSVO,
+    pub bbox: (Vector3<f32>, Vector3<f32>),
+    pub unit_length: f32,
 }
