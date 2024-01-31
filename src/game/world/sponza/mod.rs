@@ -22,7 +22,7 @@ use crate::engine::{
 };
 
 pub const SPONZA_ASSET_PATH: &str = "assets/sponza/sponza.obj";
-pub const SUBDIVISIONS: u32 = 2;
+pub const SUBDIVISIONS: u32 = 3;
 
 #[derive(Resource)]
 pub struct Sponza {

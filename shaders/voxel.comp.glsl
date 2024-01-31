@@ -32,7 +32,7 @@ layout (set = 0, binding = 4) uniform VoxelInfo {
   uint grid_length;
 } voxel_info;
 
-const uint SUBDIVISIONS = 2;
+const uint SUBDIVISIONS = 3;
 
 #include "lib/morton.glsl"
 #include "lib/voxel.glsl"
@@ -163,7 +163,7 @@ TraceOutput trace(Ray ray) {
   bool dont_push = false;
   vec3 color = vec3(0.2);
   float h = root_t_corners.y;
-  for(uint i = 0; i < 200; i++) {
+  for(uint i = 0; i < 128; i++) {
     // Calculate the intersection of the ray with the current voxel
     vec3 tmin, tmax;
     vec2 tc = ray_voxel_intersection(ray, pos, depth, tmin, tmax);
@@ -178,10 +178,7 @@ TraceOutput trace(Ray ray) {
           break;
         }
 
-        if(tc.y < h) {
-          stack[depth] = StackItem(parent_node_index, pos);
-        }
-        h = tc.y;
+        stack[depth] = StackItem(parent_node_index, pos);
 
         parent_node_index = node_index;
         vec3 t_mid = (pos - ray.origin) * ray.inv_dir;
@@ -249,17 +246,18 @@ TraceOutput trace(Ray ray) {
     }
     // color = vec3(exit_axis.x ? 1.0 : 0.0, exit_axis.y ? 1.0 : 0.0, exit_axis.z ? 1.0 : 0.0);
 
-    if(pos.x < voxel_info.bbmin.x || pos.x > voxel_info.bbmax.x ||
-       pos.y < voxel_info.bbmin.y || pos.y > voxel_info.bbmax.y ||
-       pos.z < voxel_info.bbmin.z || pos.z > voxel_info.bbmax.z) {
-      break;
-    }
-
     if(against_ray_dir) {
-      if(depth <= 0) {
+      depth--;
+      if(depth == 0) {
         break;
       }
-      depth--;
+      if(pos.x < voxel_info.bbmin.x || pos.x > voxel_info.bbmax.x ||
+         pos.y < voxel_info.bbmin.y || pos.y > voxel_info.bbmax.y ||
+         pos.z < voxel_info.bbmin.z || pos.z > voxel_info.bbmax.z) {
+        break;
+      }
+
+      // color = vec3(depth / 2.0, 0.0, 0.0);
 
       StackItem item = stack[depth];
       parent_node_index = item.node_index;
