@@ -158,11 +158,12 @@ TraceOutput trace(Ray ray) {
   uint parent_node_index = voxel_node_len - 1;
   // Holds parent indices
   StackItem stack[SUBDIVISIONS + 1];
-  stack[1] = StackItem(parent_node_index, pos);
+  uint stack_ptr = 0;
 
   bool dont_push = false;
   vec3 color = vec3(0.2);
-  for(uint i = 0; i < 3; i++) {
+  float h = root_t_corners.y;
+  for(uint i = 0; i < 200; i++) {
     // Calculate the intersection of the ray with the current voxel
     vec3 tmin, tmax;
     vec2 tc = ray_voxel_intersection(ray, pos, depth, tmin, tmax);
@@ -172,13 +173,15 @@ TraceOutput trace(Ray ray) {
       uint node_index = get_child_node_index(parent_node_index, local_morton);
       if(node_index != 0 && !dont_push) {
         VoxelNode child = voxel_nodes[node_index];
-
         if (child.data_index != 0) {
-          color = vec3(0.0, 1.0, 0.0);
+          color = vec3(0.0, 0.5, 0.0);
           break;
         }
 
-        stack[depth] = StackItem(parent_node_index, pos);
+        if(tc.y < h) {
+          stack[depth] = StackItem(parent_node_index, pos);
+        }
+        h = tc.y;
 
         parent_node_index = node_index;
         vec3 t_mid = (pos - ray.origin) * ray.inv_dir;
@@ -202,46 +205,70 @@ TraceOutput trace(Ray ray) {
 
     // Check which axis we exit the voxel on
     bvec3 exit_axis = bvec3(
-      tc.y == tmax.x,
-      tc.y == tmax.y,
-      tc.y == tmax.z
+      tc.y >= tmax.x,
+      tc.y >= tmax.y,
+      tc.y >= tmax.z
     );
+    uint exit_bits = uint(exit_axis.x) + (uint(exit_axis.y) << 1) + (uint(exit_axis.z) << 2);
+    uint flipped_local_morton = local_morton ^ exit_bits;
 
-    color = vec3(exit_axis.x ? 1.0 : 0.0, exit_axis.y ? 1.0 : 0.0, exit_axis.z ? 1.0 : 0.0);
-
-    vec3 ones = vec3(
-      (morton & 1) > 0 ? 0 : 1,
-      (morton & 2) > 0 ? 0 : 1,
-      (morton & 4) > 0 ? 0 : 1
-    );
-
-    morton = (morton) ^ (exit_axis.x ? 1 : 0) | (exit_axis.y ? 2 : 0) | (exit_axis.z ? 4 : 0);
+    morton = ((morton >> 3) << 3) | flipped_local_morton;
 
     // xor the exit axis with the ones to get the flipped bits
-    vec3 new_ones = vec3(
-      (morton & 1) > 0 ? 0 : 1,
-      (morton & 2) > 0 ? 0 : 1,
-      (morton & 4) > 0 ? 0 : 1
+    vec3 ones = vec3(
+      (local_morton & 1) > 0 ? 1 : 0,
+      (local_morton & 2) > 0 ? 1 : 0,
+      (local_morton & 4) > 0 ? 1 : 0
     );
-    pos += sign(ray.dir) * vec3(exit_axis) * get_half_length(depth) * 2;
+    vec3 new_ones = vec3(
+      (flipped_local_morton & 1) > 0 ? 1 : 0,
+      (flipped_local_morton & 2) > 0 ? 1 : 0,
+      (flipped_local_morton & 4) > 0 ? 1 : 0
+    );
+    pos += sign(ray.dir) * vec3(exit_axis) * get_half_length(depth) * 2; // correct for our xyz being diff
 
     // Check if the ray is increasing or decreasing corresponding to the flipped bits
-    bool against_ray_dir = true;
-    if(exit_axis.x) {
-      against_ray_dir = ray.dir.x > 0.0;
-    } else if(exit_axis.y) {
-      against_ray_dir = ray.dir.y > 0.0;
-    } else if(exit_axis.z) {
-      against_ray_dir = ray.dir.z > 0.0;
+    bool against_ray_dir = false;
+    if (new_ones.x < ones.x && ray.dir.x > 0) {
+      against_ray_dir = true;
+    }
+    if (new_ones.y < ones.y && ray.dir.y < 0) {
+      against_ray_dir = true;
+    }
+    if (new_ones.z < ones.z && ray.dir.z < 0) {
+      against_ray_dir = true;
+    }
+    if (new_ones.x > ones.x && ray.dir.x < 0) {
+      against_ray_dir = true;
+    }
+    if (new_ones.y > ones.y && ray.dir.y > 0) {
+      against_ray_dir = true;
+    }
+    if (new_ones.z > ones.z && ray.dir.z > 0) {
+      against_ray_dir = true;
+    }
+    // color = vec3(exit_axis.x ? 1.0 : 0.0, exit_axis.y ? 1.0 : 0.0, exit_axis.z ? 1.0 : 0.0);
+
+    if(pos.x < voxel_info.bbmin.x || pos.x > voxel_info.bbmax.x ||
+       pos.y < voxel_info.bbmin.y || pos.y > voxel_info.bbmax.y ||
+       pos.z < voxel_info.bbmin.z || pos.z > voxel_info.bbmax.z) {
+      break;
     }
 
     if(against_ray_dir) {
+      if(depth <= 0) {
+        break;
+      }
       depth--;
+
       StackItem item = stack[depth];
       parent_node_index = item.node_index;
       pos = item.pos;
       morton = morton >> 3;
+
+      // Makes it so the bits are flipped the next iteration so we don't go back into the same parent
       dont_push = true;
+      h = 10000;
     } else {
       dont_push = false;
     }

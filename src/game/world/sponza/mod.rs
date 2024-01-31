@@ -1,6 +1,7 @@
 use std::mem::size_of;
 
 use ash::vk;
+use nalgebra::Vector3;
 use voxei_macros::Resource;
 
 use crate::engine::{
@@ -16,7 +17,7 @@ use crate::engine::{
     resource::{Res, ResMut},
     voxel::{
         octree::VoxelSVO,
-        voxelizer::{TriReader, Voxelizer},
+        voxelizer::{TriReader, Triangle, Voxelizer},
     },
 };
 
@@ -61,6 +62,21 @@ impl Sponza {
         if sponza.voxelized_octree.is_none() && handle.is_loaded() {
             println!("Sponza loaded");
             let reader = TriReader::new(&handle.get().unwrap());
+            let reader = TriReader {
+                triangles: vec![
+                    Triangle::new(
+                        Vector3::new(0.0, 0.0, 1.0),
+                        Vector3::new(2.0, 0.0, 1.0),
+                        Vector3::new(0.0, 0.0, 1.0),
+                    ),
+                    Triangle::new(
+                        Vector3::new(1.0, 0.0, 1.0),
+                        Vector3::new(1.0, 2.0, 1.0),
+                        Vector3::new(1.0, 0.0, 1.0),
+                    ),
+                ],
+                bbox: (Vector3::new(0.0, 0.0, 0.0), Vector3::new(2.0, 2.0, 2.0)),
+            };
             let grid_length = 1 << SUBDIVISIONS;
             let bbox = reader.bbox.clone();
 

@@ -1,5 +1,7 @@
+use std::f32::consts::FRAC_PI_2;
+
 use ash::vk;
-use nalgebra::{Translation, Translation3, Vector3};
+use nalgebra::{SimdPartialOrd, Translation, Translation3, Vector3};
 use voxei_macros::Resource;
 
 use crate::constants;
@@ -80,6 +82,9 @@ impl PrimaryCamera {
             let euler_angles = &mut primary_camera.euler_angles;
             euler_angles.x += ry;
             euler_angles.y += rx;
+
+            // prevents weird behaviours when moving and looking up/down
+            euler_angles.x = euler_angles.x.clamp(-FRAC_PI_2 + 0.001, FRAC_PI_2 - 0.001);
 
             let rotation = nalgebra::UnitQuaternion::from_euler_angles(
                 euler_angles.x,
