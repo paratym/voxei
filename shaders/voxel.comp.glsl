@@ -29,10 +29,9 @@ layout (set = 0, binding = 4) uniform VoxelInfo {
   vec3 bbmin;
   vec3 bbmax;
   float unit_length;
-  uint grid_length;
 } voxel_info;
 
-const uint SUBDIVISIONS = 6;
+const uint SUBDIVISIONS = 4;
 
 #include "lib/morton.glsl"
 #include "lib/voxel.glsl"

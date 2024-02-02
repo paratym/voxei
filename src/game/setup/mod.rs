@@ -2,7 +2,7 @@ use crate::{
     engine::{
         assets::{
             asset::Assets,
-            loader::{obj::ObjLoader, spirv::SpirVLoader},
+            loader::{obj::ObjLoader, octree::OctreeLoader, spirv::SpirVLoader},
             watched_shaders::WatchedShaders,
         },
         common::time::Time,
@@ -25,6 +25,7 @@ pub fn setup_resources(app: &mut App) {
     let mut assets = Assets::new();
     assets.add_loader::<SpirVLoader>();
     assets.add_loader::<ObjLoader>();
+    assets.add_loader::<OctreeLoader>();
     app.resource_bank_mut().insert(assets);
 
     // Graphics

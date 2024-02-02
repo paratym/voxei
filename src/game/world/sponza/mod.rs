@@ -1,4 +1,4 @@
-use std::mem::size_of;
+use std::{mem::size_of, ops::Deref};
 
 use ash::vk;
 use nalgebra::Vector3;
@@ -6,23 +6,22 @@ use voxei_macros::Resource;
 
 use crate::engine::{
     assets::asset::{Assets, Handle},
+    geometry::shapes::aabb::AABB,
     graphics::vulkan::{
         allocator::VulkanMemoryAllocator,
         objects::{
-            buffer::{Buffer, BufferCreateInfo, BufferInfo},
+            buffer::{Buffer, BufferCreateInfo},
             glsl::{GlslDataBuilder, GlslFloat, GlslUInt, GlslVec3f},
         },
         vulkan::Vulkan,
     },
+    model::mesh::Mesh,
     resource::{Res, ResMut},
-    voxel::{
-        octree::VoxelSVO,
-        voxelizer::{TriReader, Triangle, Voxelizer},
-    },
+    voxel::{octree::VoxelSVO, voxelizer},
 };
 
 pub const SPONZA_ASSET_PATH: &str = "assets/bunny.obj";
-pub const SUBDIVISIONS: u32 = 6;
+pub const SUBDIVISIONS: u32 = 4;
 
 #[derive(Resource)]
 pub struct Sponza {
@@ -60,28 +59,33 @@ impl Sponza {
         };
 
         if sponza.voxelized_octree.is_none() && handle.is_loaded() {
-            println!("Sponza loaded");
-            let models = vec![tobj::Model {
-                mesh: tobj::Mesh {
-                    // triangle vertical
-                    positions: vec![0.002, 0.00, 0.004, 0.002, 0.0, 0.004, 0.0, 0.002, 0.004],
-                    indices: vec![0, 1, 2],
-                    ..Default::default()
-                },
-                name: "model".to_owned(),
-            }];
-            let reader = TriReader::new(&models);
-            let reader = TriReader::new(&handle.get().unwrap());
-            let grid_length = 1 << SUBDIVISIONS;
-
-            println!("Voxelizing Sponza with grid length {}", grid_length);
-            let voxelizer = Voxelizer::new(reader, grid_length);
-            let voxel_data = voxelizer.voxelize(Vector3::new(0.0, 0.0, 0.0), 100.0);
-            let unit_length = voxel_data.unit_length;
-            let bbox = voxel_data.bbox;
-            sponza.voxelized_octree = Some(voxel_data.svo);
+            println!("Voxelizing Sponza with grid length {}", 1 << SUBDIVISIONS);
+            let mesh = Mesh::from(handle.get().unwrap().deref());
+            let voxel_svo = voxelizer::voxelize(&mesh, SUBDIVISIONS);
             println!("Voxelized Sponza");
 
+            let bbox = AABB::new_min_max(Vector3::new(0.0, 0.0, 0.0), Vector3::new(5.0, 5.0, 5.0));
+            if bbox.max().x - bbox.min().x != bbox.max().y - bbox.min().y
+                || bbox.max().x - bbox.min().x != bbox.max().z - bbox.min().z
+            {
+                panic!("Bbox is not a cube");
+            }
+
+            let unit_length = (bbox.max().x - bbox.min().x) / (1 << SUBDIVISIONS) as f32;
+
+            // Save the voxelized octree to a file
+            sponza.voxelized_octree = Some(voxel_svo);
+            std::fs::write(
+                "assets/sponza.svo",
+                ron::ser::to_string_pretty(
+                    &sponza.voxelized_octree.as_ref().unwrap(),
+                    Default::default(),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+
+            // Do gpu stuff
             let node_count = sponza.voxelized_octree.as_ref().unwrap().nodes().len();
             let size = size_of::<u64>() + (size_of::<u64>() * 2 + (8)) * node_count;
             let gpu_nodes = Buffer::new(
@@ -119,22 +123,19 @@ impl Sponza {
                 },
             );
 
-            // Copy voxel structure info to gpu.
             let info_ptr = info.instance().allocation().instance().map_memory(0) as *mut u8;
 
             let mut writer = GlslDataBuilder::new();
-            writer.push(GlslVec3f::new(bbox.0.x, bbox.0.y, bbox.0.z));
-            writer.push(GlslVec3f::new(bbox.1.x, bbox.1.y, bbox.1.z));
-            println!("Bbox: {:?}", bbox);
+            writer.push(GlslVec3f::new(bbox.min().x, bbox.min().y, bbox.min().z));
+            writer.push(GlslVec3f::new(bbox.max().x, bbox.max().y, bbox.max().z));
             writer.push(GlslFloat::new(unit_length));
-            writer.push(GlslUInt::new(grid_length as u32));
+
             let data = writer.build();
 
             unsafe { info_ptr.copy_from_nonoverlapping(data.as_ptr(), data.len()) };
 
             info.instance().allocation().instance().unmap_memory();
 
-            // Copy svo data to gpu
             let mut node_ptr =
                 gpu_nodes.instance().allocation().instance().map_memory(0) as *mut u32;
             println!("Node count: {}", node_count);

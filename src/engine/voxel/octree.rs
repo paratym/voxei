@@ -1,3 +1,5 @@
+use serde::{Deserialize, Serialize};
+
 pub type MortonCode = u32;
 
 #[derive(Clone, Debug)]
@@ -15,11 +17,12 @@ impl VoxelData {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VoxelMaterial {
     pub normal: [f32; 3],
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct SVONode {
     pub data_index: usize,
     pub children_base_index: usize,
@@ -50,10 +53,10 @@ impl SVONode {
     }
 }
 
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct VoxelSVO {
     nodes: Vec<SVONode>,
     material: Vec<VoxelMaterial>,
-    unit_length: f32,
 }
 
 impl VoxelSVO {
@@ -63,10 +66,6 @@ impl VoxelSVO {
 
     pub fn materials(&self) -> &[VoxelMaterial] {
         &self.material
-    }
-
-    pub fn unit_length(&self) -> f32 {
-        self.unit_length
     }
 }
 
@@ -166,7 +165,7 @@ impl VoxelSVOBuilder {
         parent
     }
 
-    pub fn finalize_svo(mut self, unit_length: f32) -> VoxelSVO {
+    pub fn finalize_svo(mut self) -> VoxelSVO {
         let final_mortan_code = 8u32.pow(self.max_depth);
 
         // Fill in empty voxels
@@ -182,7 +181,6 @@ impl VoxelSVOBuilder {
                 .into_iter()
                 .map(|x| VoxelMaterial { normal: x.normal })
                 .collect(),
-            unit_length,
         }
     }
 
