@@ -8,6 +8,38 @@ pub struct Mesh {
 }
 
 impl Mesh {
+    pub fn new(triangles: Vec<Triangle>) -> Self {
+        let mut min = Vector3::new(f32::MAX, f32::MAX, f32::MAX);
+        let mut max = Vector3::new(f32::MIN, f32::MIN, f32::MIN);
+
+        for triangle in &triangles {
+            min.x = min
+                .x
+                .min(triangle.v1.x.min(triangle.v2.x.min(triangle.v3.x)));
+            min.y = min
+                .y
+                .min(triangle.v1.y.min(triangle.v2.y.min(triangle.v3.y)));
+            min.z = min
+                .z
+                .min(triangle.v1.z.min(triangle.v2.z.min(triangle.v3.z)));
+
+            max.x = max
+                .x
+                .max(triangle.v1.x.max(triangle.v2.x.max(triangle.v3.x)));
+            max.y = max
+                .y
+                .max(triangle.v1.y.max(triangle.v2.y.max(triangle.v3.y)));
+            max.z = max
+                .z
+                .max(triangle.v1.z.max(triangle.v2.z.max(triangle.v3.z)));
+        }
+
+        Mesh {
+            triangles,
+            bbox: AABB::new_min_max(min, max),
+        }
+    }
+
     pub fn triangles(&self) -> &Vec<Triangle> {
         &self.triangles
     }

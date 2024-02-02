@@ -10,12 +10,31 @@ use super::{
     octree::{VoxelData, VoxelSVO, VoxelSVOBuilder},
 };
 
-pub fn voxelize(mesh: &Mesh, subdivisions: u32) -> VoxelSVO {
+#[derive(Debug)]
+pub struct VoxelizeResult {
+    pub voxel_svo: VoxelSVO,
+
+    /// The offset of the mesh's min point to the min point of the voxel grid
+    /// This is due to the fact that voxel grids must be cubes so some axis may have grown.
+    pub root_offset: Vector3<f32>,
+}
+
+pub fn voxelize(mesh: &Mesh, subdivisions: u32) -> VoxelizeResult {
     let grid_length = (1 << subdivisions) as u32;
     let morton_count = grid_length.pow(3);
 
     let bbox = mesh.bbox();
     let max_length = bbox.half_extents().max() * 2.0;
+    let square_bbox = {
+        let half_max_length = max_length / 2.0;
+        println!("half_max_length: {:?}", half_max_length);
+        AABB::new_center_half_extent(
+            bbox.center(),
+            Vector3::new(half_max_length, half_max_length, half_max_length),
+        )
+    };
+    // How much each axis grew to result in a square bbox
+    let bbox_offset = square_bbox.half_extents() - bbox.half_extents();
 
     // The conversion from 1 voxel unit * unit_length = world space length
     let unit_length = (1.0 / grid_length as f32) * max_length;
@@ -40,7 +59,7 @@ pub fn voxelize(mesh: &Mesh, subdivisions: u32) -> VoxelSVO {
         );
 
         let map_to_grid = |vec: Vector3<f32>| -> Vector3<u32> {
-            let vec = vec * (grid_length as f32 / max_length) as f32;
+            let vec = (vec + bbox_offset) * (grid_length as f32 / max_length) as f32;
             let vec = Vector3::new(
                 vec.x.floor().clamp(0.0, grid_length as f32 - 1.0) as u32,
                 vec.y.floor().clamp(0.0, grid_length as f32 - 1.0) as u32,
@@ -64,35 +83,29 @@ pub fn voxelize(mesh: &Mesh, subdivisions: u32) -> VoxelSVO {
             .cross(&(triangle.v3 - triangle.v1))
             .normalize();
 
-        let square_bbox = {
-            let half_max_length = max_length / 2.0;
-            AABB::new(
-                bbox.center(),
-                Vector3::new(half_max_length, half_max_length, half_max_length),
-            )
-        };
         let world_grid_min = square_bbox.min();
-        println!("world_grid_min: {:?}", world_grid_min);
         // Iterate through triangle grid voxels
         for x in min_grid.x..=max_grid.x {
             for y in min_grid.y..=max_grid.y {
                 for z in min_grid.z..=max_grid.z {
                     let index = morton::util::morton_encode(x, y, z);
 
-                    if voxel_marker[index as usize] == 1 {
-                        continue;
-                    }
+                    // unflip the y and z axis or find a better way to calc
+                    let flipped_grid = Vector3::new(x, grid_length - 1 - y, grid_length - 1 - z);
+                    let maxdf = max_length / grid_length as f32;
+                    let flipped_grid = Vector3::new(
+                        flipped_grid.x as f32 * maxdf,
+                        flipped_grid.y as f32 * maxdf,
+                        flipped_grid.z as f32 * maxdf,
+                    );
+                    println!("flipped_grid: {:?}", flipped_grid);
+                    let voxel_world_min = world_grid_min + flipped_grid;
+                    let voxel_world_max =
+                        voxel_world_min + Vector3::new(unit_length, unit_length, unit_length);
+                    let local_aabb = AABB::new_min_max(voxel_world_min, voxel_world_max);
+                    println!("local_aabb: {:?}", local_aabb);
 
-                    let local_min: Vector3<f32> = world_grid_min
-                        + Vector3::new(
-                            x as f32 * unit_length,
-                            y as f32 * unit_length,
-                            z as f32 * unit_length,
-                        );
-                    let local_max = local_min.map(|x| x + unit_length);
-                    let local_aabb = AABB::new(local_min, local_max);
-
-                    if true {
+                    if triangle.test_intersection(&local_aabb) {
                         voxel_marker[index as usize] = 1;
                         voxel_data.push(VoxelData {
                             morton_code: index,
@@ -111,5 +124,9 @@ pub fn voxelize(mesh: &Mesh, subdivisions: u32) -> VoxelSVO {
     // Create SVO
     let mut builder = VoxelSVOBuilder::new(grid_length as usize);
     voxel_data.iter().for_each(|x| builder.add_voxel(x.clone()));
-    builder.finalize_svo()
+
+    VoxelizeResult {
+        voxel_svo: builder.finalize_svo(),
+        root_offset: bbox_offset,
+    }
 }

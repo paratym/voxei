@@ -11,7 +11,7 @@ pub struct AABB {
 }
 
 impl AABB {
-    pub fn new(center: Vector3<f32>, half_extents: Vector3<f32>) -> Self {
+    pub fn new_center_half_extent(center: Vector3<f32>, half_extents: Vector3<f32>) -> Self {
         Self {
             center,
             half_extents,
@@ -25,6 +25,15 @@ impl AABB {
             center,
             half_extents,
         }
+    }
+
+    pub fn into_cube(&self) -> Self {
+        let half_max_length = self.half_extents.max();
+
+        Self::new_center_half_extent(
+            self.center(),
+            Vector3::new(half_max_length, half_max_length, half_max_length),
+        )
     }
 
     pub fn center(&self) -> Vector3<f32> {

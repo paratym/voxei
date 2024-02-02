@@ -43,7 +43,7 @@ pub struct PrimaryCamera {
 impl PrimaryCamera {
     pub fn new(vulkan: &Vulkan, vulkan_memory_allocator: &mut VulkanMemoryAllocator) -> Self {
         let mut transform = Transform::new();
-        transform.isometry.translation.vector = Vector3::new(0.5, 1.5, -3.0);
+        transform.isometry.translation.vector = Vector3::new(0.5, 0.0, -3.0);
 
         Self {
             camera: Camera::new(vulkan, vulkan_memory_allocator),

@@ -6,7 +6,7 @@ use voxei_macros::Resource;
 
 use crate::engine::{
     assets::asset::{Assets, Handle},
-    geometry::shapes::aabb::AABB,
+    geometry::shapes::{aabb::AABB, triangle::Triangle},
     graphics::vulkan::{
         allocator::VulkanMemoryAllocator,
         objects::{
@@ -22,6 +22,7 @@ use crate::engine::{
 
 pub const SPONZA_ASSET_PATH: &str = "assets/bunny.obj";
 pub const SUBDIVISIONS: u32 = 4;
+pub const SCALE: f32 = 5.0;
 
 #[derive(Resource)]
 pub struct Sponza {
@@ -61,10 +62,28 @@ impl Sponza {
         if sponza.voxelized_octree.is_none() && handle.is_loaded() {
             println!("Voxelizing Sponza with grid length {}", 1 << SUBDIVISIONS);
             let mesh = Mesh::from(handle.get().unwrap().deref());
-            let voxel_svo = voxelizer::voxelize(&mesh, SUBDIVISIONS);
+            let mesh = Mesh::new(vec![Triangle::new(
+                Vector3::new(0.0, 0.0, 0.0),
+                Vector3::new(1.0, 0.0, 0.0),
+                Vector3::new(0.0, 0.0, 1.0),
+            )]);
+            let voxelize_result = voxelizer::voxelize(&mesh, SUBDIVISIONS);
+            println!("result: {:?}", voxelize_result);
             println!("Voxelized Sponza");
 
-            let bbox = AABB::new_min_max(Vector3::new(0.0, 0.0, 0.0), Vector3::new(5.0, 5.0, 5.0));
+            // Scales and translates the voxelized octree to account for any extra axis length
+            // due to the cube constraint.
+            // This scale is the whole length of the model's bounding box
+            let vector_offset = Vector3::new(
+                SCALE * voxelize_result.root_offset.x,
+                SCALE * voxelize_result.root_offset.y,
+                SCALE * voxelize_result.root_offset.z,
+            );
+            let bbox = AABB::new_min_max(
+                Vector3::new(0.0, 0.0, 0.0) - vector_offset,
+                Vector3::new(SCALE, SCALE, SCALE) - vector_offset,
+            );
+            println!("bbox: {:?}", bbox);
             if bbox.max().x - bbox.min().x != bbox.max().y - bbox.min().y
                 || bbox.max().x - bbox.min().x != bbox.max().z - bbox.min().z
             {
@@ -74,7 +93,7 @@ impl Sponza {
             let unit_length = (bbox.max().x - bbox.min().x) / (1 << SUBDIVISIONS) as f32;
 
             // Save the voxelized octree to a file
-            sponza.voxelized_octree = Some(voxel_svo);
+            sponza.voxelized_octree = Some(voxelize_result.voxel_svo);
             std::fs::write(
                 "assets/sponza.svo",
                 ron::ser::to_string_pretty(
