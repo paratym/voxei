@@ -21,7 +21,7 @@ use crate::engine::{
 };
 
 pub const SPONZA_ASSET_PATH: &str = "assets/bunny.obj";
-pub const SUBDIVISIONS: u32 = 4;
+pub const SUBDIVISIONS: u32 = 7;
 pub const SCALE: f32 = 5.0;
 
 #[derive(Resource)]
@@ -61,23 +61,29 @@ impl Sponza {
 
         if sponza.voxelized_octree.is_none() && handle.is_loaded() {
             println!("Voxelizing Sponza with grid length {}", 1 << SUBDIVISIONS);
+            let mesh = Mesh::new(vec![
+                Triangle::new(
+                    Vector3::new(0.0, 0.0, 0.0),
+                    Vector3::new(-4.0, 0.0, 0.0),
+                    Vector3::new(0.0, 0.0, 1.0),
+                ),
+                Triangle::new(
+                    Vector3::new(0.0, 2.0, 0.0),
+                    Vector3::new(0.0, 1.0, 2.0),
+                    Vector3::new(0.0, 0.0, 0.0),
+                ),
+            ]);
             let mesh = Mesh::from(handle.get().unwrap().deref());
-            let mesh = Mesh::new(vec![Triangle::new(
-                Vector3::new(0.0, 0.0, 0.0),
-                Vector3::new(1.0, 0.0, 0.0),
-                Vector3::new(0.0, 0.0, 1.0),
-            )]);
-            let voxelize_result = voxelizer::voxelize(&mesh, SUBDIVISIONS);
-            println!("result: {:?}", voxelize_result);
+            let voxelize_result = voxelizer::voxelize(&mesh, SUBDIVISIONS, 0.01);
             println!("Voxelized Sponza");
 
             // Scales and translates the voxelized octree to account for any extra axis length
             // due to the cube constraint.
             // This scale is the whole length of the model's bounding box
             let vector_offset = Vector3::new(
-                SCALE * voxelize_result.root_offset.x,
-                SCALE * voxelize_result.root_offset.y,
-                SCALE * voxelize_result.root_offset.z,
+                SCALE * voxelize_result.root_min_offset.x,
+                SCALE * voxelize_result.root_min_offset.y,
+                SCALE * voxelize_result.root_min_offset.z,
             );
             let bbox = AABB::new_min_max(
                 Vector3::new(0.0, 0.0, 0.0) - vector_offset,
@@ -94,15 +100,15 @@ impl Sponza {
 
             // Save the voxelized octree to a file
             sponza.voxelized_octree = Some(voxelize_result.voxel_svo);
-            std::fs::write(
-                "assets/sponza.svo",
-                ron::ser::to_string_pretty(
-                    &sponza.voxelized_octree.as_ref().unwrap(),
-                    Default::default(),
-                )
-                .unwrap(),
-            )
-            .unwrap();
+            // std::fs::write(
+            //     "assets/sponza.svo",
+            //     ron::ser::to_string_pretty(
+            //         &sponza.voxelized_octree.as_ref().unwrap(),
+            //         Default::default(),
+            //     )
+            //     .unwrap(),
+            // )
+            // .unwrap();
 
             // Do gpu stuff
             let node_count = sponza.voxelized_octree.as_ref().unwrap().nodes().len();
@@ -119,7 +125,7 @@ impl Sponza {
             );
 
             let material_count = sponza.voxelized_octree.as_ref().unwrap().materials().len();
-            let size = size_of::<u64>() + (size_of::<f32>() * 4) * material_count;
+            let size = size_of::<u64>() + /*padding */(size_of::<f32>() * 3) + (size_of::<f32>() * 4) * material_count;
             println!("Material count: {}", material_count);
             let gpu_materials = Buffer::new(
                 &vulkan,
@@ -184,8 +190,8 @@ impl Sponza {
                 .instance()
                 .map_memory(0) as *mut u32;
             unsafe { mat_ptr.write(material_count as u32) };
-            mat_ptr = unsafe { mat_ptr.add(1) };
             let mut mat_ptr = mat_ptr as *mut f32;
+            mat_ptr = unsafe { mat_ptr.add(4) };
 
             for mat in sponza.voxelized_octree.as_ref().unwrap().materials() {
                 unsafe {

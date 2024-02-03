@@ -31,7 +31,7 @@ layout (set = 0, binding = 4) uniform VoxelInfo {
   float unit_length;
 } voxel_info;
 
-const uint SUBDIVISIONS = 4;
+const uint SUBDIVISIONS = 7;
 
 #include "lib/morton.glsl"
 #include "lib/voxel.glsl"
@@ -183,7 +183,7 @@ TraceOutput trace(Ray ray) {
           vec3 n = voxel_data[child.data_index].normal;
           vec3 p = pos;
           vec3 p_to_light = normalize(LIGHT_POS - p);
-          color = max(dot(n, p_to_light), 0.1) * vec3(0.8, 0.4, 0.2);
+          color = max(dot(n, p_to_light), 0.1) * vec3(1.0, 0.4, 0.2);
           break;
         }
 

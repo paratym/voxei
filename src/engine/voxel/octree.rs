@@ -174,6 +174,7 @@ impl VoxelSVOBuilder {
         // Add root node
         self.svo_nodes.push(self.buffers[0][0].clone());
 
+        println!("data: {:?}", self.svo_data);
         VoxelSVO {
             nodes: self.svo_nodes,
             material: self

@@ -2,6 +2,7 @@ use nalgebra::Vector3;
 
 use super::{Face, Shape, Vertex};
 
+#[derive(Debug, Clone)]
 pub struct Triangle {
     pub v1: Vector3<f32>,
     pub v2: Vector3<f32>,
