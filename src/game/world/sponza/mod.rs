@@ -21,7 +21,7 @@ use crate::engine::{
 };
 
 pub const SPONZA_ASSET_PATH: &str = "assets/bunny.obj";
-pub const SUBDIVISIONS: u32 = 7;
+pub const SUBDIVISIONS: u32 = 6;
 pub const SCALE: f32 = 5.0;
 
 #[derive(Resource)]
@@ -74,7 +74,7 @@ impl Sponza {
                 ),
             ]);
             let mesh = Mesh::from(handle.get().unwrap().deref());
-            let voxelize_result = voxelizer::voxelize(&mesh, SUBDIVISIONS, 0.01);
+            let voxelize_result = voxelizer::voxelize(&mesh, SUBDIVISIONS, 0.1);
             println!("Voxelized Sponza");
 
             // Scales and translates the voxelized octree to account for any extra axis length

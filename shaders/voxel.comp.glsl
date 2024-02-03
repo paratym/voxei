@@ -31,7 +31,7 @@ layout (set = 0, binding = 4) uniform VoxelInfo {
   float unit_length;
 } voxel_info;
 
-const uint SUBDIVISIONS = 7;
+const uint SUBDIVISIONS = 6;
 
 #include "lib/morton.glsl"
 #include "lib/voxel.glsl"
@@ -146,7 +146,6 @@ TraceOutput trace(Ray ray) {
   if(!hit) {
     return TraceOutput(false, vec3(0.0), color);
   }
-  color = vec3(0.0, 0.0, 0.0);
 
   VoxelNode parent_node = voxel_nodes[voxel_node_len - 1];
   // The center position of the root node.

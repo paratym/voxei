@@ -77,10 +77,8 @@ pub fn voxelize(mesh: &Mesh, subdivisions: u32, margin: f32) -> VoxelizeResult {
         let world_to_grid = |mut vec: Vector3<f32>| -> Vector3<u32> {
             // Convert vector from world space to model space, coordinate should now range from 0 to max_length
             vec -= world_min_anchor;
-            println!("vec: {:?}", vec);
             // Scale the vector to the grid length
             vec /= unit_length;
-            println!("vec: {:?}", vec);
             let vec = Vector3::new(
                 vec.x.floor().clamp(0.0, grid_length as f32 - 1.0) as u32,
                 vec.y.floor().clamp(0.0, grid_length as f32 - 1.0) as u32,
@@ -104,12 +102,18 @@ pub fn voxelize(mesh: &Mesh, subdivisions: u32, margin: f32) -> VoxelizeResult {
             (min, max)
         };
 
-        let (min_grid, max_grid) = world_min_max_to_grid(tri_min, tri_max);
+        let grid_to_world_min_max = |vec: Vector3<u32>| -> (Vector3<f32>, Vector3<f32>) {
+            let vec = Vector3::new(
+                vec.x as f32 * unit_length,
+                (grid_length - 1 - vec.y) as f32 * unit_length,
+                (grid_length - 1 - vec.z) as f32 * unit_length,
+            );
+            let min = vec + world_min_anchor;
+            let max = min + Vector3::new(unit_length, unit_length, unit_length);
+            (min, max)
+        };
 
-        println!("tri_min: {:?}", tri_min);
-        println!("tri_max: {:?}", tri_max);
-        println!("min_grid: {:?}", min_grid);
-        println!("max_grid: {:?}", max_grid);
+        let (min_grid, max_grid) = world_min_max_to_grid(tri_min, tri_max);
 
         let normal = (triangle.v2 - triangle.v1)
             .cross(&(triangle.v3 - triangle.v1))
@@ -119,12 +123,14 @@ pub fn voxelize(mesh: &Mesh, subdivisions: u32, margin: f32) -> VoxelizeResult {
         for x in min_grid.x..=max_grid.x {
             for y in min_grid.y..=max_grid.y {
                 for z in min_grid.z..=max_grid.z {
-                    println!("x: {}, y: {}, z: {}", x, y, z);
                     let index = morton::util::morton_encode(x, y, z);
 
                     if voxel_marker[index as usize] == 1 {
                         continue;
                     }
+
+                    let (mut voxel_world_min, mut voxel_world_max) =
+                        grid_to_world_min_max(Vector3::new(x, y, z));
 
                     // // Define intersection padding for the voxel
                     let mbottom = y > min_grid.y;
@@ -134,28 +140,28 @@ pub fn voxelize(mesh: &Mesh, subdivisions: u32, margin: f32) -> VoxelizeResult {
                     let mback = z > min_grid.z;
                     let mfront = z < max_grid.z;
 
-                    // if mtop {
-                    //     voxel_world_max.y -= scaled_margin;
-                    // }
-                    // if mbottom {
-                    //     voxel_world_min.y += scaled_margin;
-                    // }
-                    // if mleft {
-                    //     voxel_world_min.x += scaled_margin;
-                    // }
-                    // if mright {
-                    //     voxel_world_max.x -= scaled_margin;
-                    // }
-                    // if mfront {
-                    //     voxel_world_max.z -= scaled_margin;
-                    // }
-                    // if mback {
-                    //     voxel_world_min.z += scaled_margin;
-                    // }
+                    if mtop {
+                        voxel_world_max.y -= scaled_margin;
+                    }
+                    if mbottom {
+                        voxel_world_min.y += scaled_margin;
+                    }
+                    if mleft {
+                        voxel_world_min.x += scaled_margin;
+                    }
+                    if mright {
+                        voxel_world_max.x -= scaled_margin;
+                    }
+                    if mfront {
+                        voxel_world_max.z -= scaled_margin;
+                    }
+                    if mback {
+                        voxel_world_min.z += scaled_margin;
+                    }
 
-                    // let voxel_world_aabb = AABB::new_min_max(voxel_world_min, voxel_world_max);
+                    let voxel_world_aabb = AABB::new_min_max(voxel_world_min, voxel_world_max);
 
-                    if true {
+                    if triangle.test_intersection(&voxel_world_aabb) {
                         voxel_marker[index as usize] = 1;
                         voxel_data.push(VoxelData {
                             morton_code: index,
