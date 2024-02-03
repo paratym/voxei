@@ -10,6 +10,7 @@ use crate::engine::graphics::render_manager::{FrameIndex, RenderManager};
 use crate::engine::graphics::resource_manager::RenderResourceManager;
 use crate::engine::graphics::vulkan::allocator::VulkanMemoryAllocator;
 use crate::engine::graphics::vulkan::swapchain::SwapchainCreateInfo;
+use crate::engine::graphics::SwapchainRefreshed;
 use crate::engine::window::window::{Window, WindowConfig};
 use crate::game::app::App;
 
@@ -55,15 +56,9 @@ pub fn setup_graphical_resources(app: &mut App) {
     let mut swapchain = Swapchain::new();
     swapchain.refresh(
         &vulkan,
-        &SwapchainCreateInfo {
-            width: window.width(),
-            height: window.height(),
-            create_image_views: false,
-            image_usage: vk::ImageUsageFlags::TRANSFER_DST,
-            preferred_image_count: 2,
-            preferred_present_mode: vk::PresentModeKHR::FIFO,
-        },
+        &Swapchain::create_info(window.width(), window.height()),
     );
+    let swapchain_refreshed = SwapchainRefreshed(false);
 
     let default_queue_executor = DefaultQueueExecutor::new(&vulkan);
 
@@ -83,6 +78,7 @@ pub fn setup_graphical_resources(app: &mut App) {
     app.resource_bank_mut().insert(vulkan);
     app.resource_bank_mut().insert(vulkan_memory_allocator);
     app.resource_bank_mut().insert(swapchain);
+    app.resource_bank_mut().insert(swapchain_refreshed);
     app.resource_bank_mut().insert(default_queue_executor);
     app.resource_bank_mut().insert(frame_index);
     app.resource_bank_mut().insert(resource_manager);

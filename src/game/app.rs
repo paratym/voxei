@@ -1,6 +1,14 @@
 use winit::event_loop::EventLoop;
 
-use crate::engine::{input::Input, resource::ResourceBank};
+use crate::engine::{
+    graphics::{
+        vulkan::{swapchain::Swapchain, vulkan::Vulkan},
+        SwapchainRefreshed,
+    },
+    input::Input,
+    resource::ResourceBank,
+    window::window::Window,
+};
 use winit::event::{Event as WinitEvent, WindowEvent as WinitWindowEvent};
 
 use super::game_loop::game_loop;
@@ -40,6 +48,19 @@ impl App {
                     WinitEvent::WindowEvent { event, .. } => match event {
                         WinitWindowEvent::CloseRequested => {
                             window.exit();
+                        }
+                        WinitWindowEvent::Resized(new_size) => {
+                            let vulkan = self.resource_bank().get_resource::<Vulkan>();
+                            unsafe { vulkan.device().device_wait_idle().unwrap() };
+                            self.resource_bank()
+                                .get_resource_mut::<SwapchainRefreshed>()
+                                .0 = true;
+                            self.resource_bank()
+                                .get_resource_mut::<Swapchain>()
+                                .refresh(
+                                    &vulkan,
+                                    &Swapchain::create_info(new_size.width, new_size.height),
+                                );
                         }
                         event => {
                             self.resource_bank_mut()

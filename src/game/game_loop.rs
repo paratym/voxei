@@ -1,7 +1,7 @@
 use crate::engine::{
     assets::{asset::Assets, watched_shaders::WatchedShaders},
     common::{camera::PrimaryCamera, time::Time},
-    graphics::render_manager::RenderManager,
+    graphics::{render_manager::RenderManager, SwapchainRefreshed},
     input::Input,
     system::System,
 };
@@ -42,6 +42,7 @@ pub fn game_loop(app: &mut App) {
     execute_system(app, RenderManager::submit_frame);
 
     execute_system(app, Input::clear_inputs);
+    execute_system(app, SwapchainRefreshed::clear);
 }
 
 fn execute_system<Marker>(app: &mut App, mut system: impl System<Marker>) {

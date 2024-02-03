@@ -131,6 +131,9 @@ impl<const N: usize> QueueExecutor<N> {
                 _ => panic!("Unknown error occured when presenting to the swapchain."),
             }
         }
+        if present_result.unwrap() {
+            panic!("Swapchain is out of date.");
+        }
     }
 
     pub fn wait_idle(&self) {

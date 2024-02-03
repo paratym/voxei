@@ -25,6 +25,7 @@ use crate::{
                 },
                 vulkan::Vulkan,
             },
+            SwapchainRefreshed,
         },
         resource::{Res, ResMut},
     },
@@ -131,8 +132,11 @@ impl VoxelRenderPass {
         primary_camera: Res<PrimaryCamera>,
         terrain: Res<Terrain>,
         sponza: Res<Sponza>,
+        swapchain_refreshed: Res<SwapchainRefreshed>,
     ) {
-        if watched_shaders.is_dependency_signaled(&voxel_pass.shader_signal) {
+        if watched_shaders.is_dependency_signaled(&voxel_pass.shader_signal)
+            || swapchain_refreshed.0
+        {
             let shader_code = watched_shaders
                 .get_shader(gfx_constants::VOXEL_COMPUTE_SHADER_NAME)
                 .expect("Voxel compute shader not loaded but we thought it was.");

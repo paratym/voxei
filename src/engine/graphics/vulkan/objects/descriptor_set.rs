@@ -297,16 +297,16 @@ impl DescriptorSetPool {
         let descriptor_pool_sizes = [
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::UNIFORM_BUFFER)
-                .descriptor_count(10),
+                .descriptor_count(100),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::COMBINED_IMAGE_SAMPLER)
-                .descriptor_count(10),
+                .descriptor_count(100),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::STORAGE_IMAGE)
-                .descriptor_count(10),
+                .descriptor_count(100),
             vk::DescriptorPoolSize::default()
                 .ty(vk::DescriptorType::STORAGE_BUFFER)
-                .descriptor_count(10),
+                .descriptor_count(100),
         ];
 
         let descriptor_pool_create_info = vk::DescriptorPoolCreateInfo::default()
@@ -387,6 +387,20 @@ impl DescriptorSetPool {
         }
 
         handles
+    }
+
+    pub fn reset(&mut self) {
+        self.descriptor_sets.clear();
+        unsafe {
+            self.instance
+                .vulkan_dep
+                .device()
+                .reset_descriptor_pool(
+                    self.instance.descriptor_pool,
+                    vk::DescriptorPoolResetFlags::empty(),
+                )
+                .unwrap();
+        };
     }
 
     pub fn create_dep(&self) -> DescriptorSetPoolDep {

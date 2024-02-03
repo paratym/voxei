@@ -7,18 +7,18 @@ use crate::{
         graphics::vulkan::{
             executor::QueueExecutorSubmitInfo, swapchain::Swapchain, vulkan::Vulkan,
         },
-        resource::ResMut,
-    },
+        resource::{ResMut, Res}, window::window::Window,
+    }, game::graphics::pipeline::util::refresh_render_resources,
 };
 
 use super::{
     queues::DefaultQueueExecutor,
     resource_manager::RenderResourceManager,
-    vulkan::objects::{
+    vulkan::{objects::{
         command::{util::BlitImageInfo, CommandBuffer, CommandBufferHandle, CommandPool},
         image::ImageMemoryBarrier,
         sync::{Fence, Semaphore},
-    },
+    }, swapchain::SwapchainCreateInfo}, SwapchainRefreshed,
 };
 
 #[derive(Resource)]
@@ -138,14 +138,19 @@ impl RenderManager {
         resource_manager: ResMut<RenderResourceManager>,
         mut frame_index: ResMut<FrameIndex>,
         mut default_executor: ResMut<DefaultQueueExecutor>,
-        swapchain: ResMut<Swapchain>,
+        vulkan: Res<Vulkan>,
+        window: Res<Window>,
+        mut swapchain: ResMut<Swapchain>,
+        mut swapchain_refreshed: ResMut<SwapchainRefreshed>,
     ) {
         let Some(submit_info) = render_manager.submit_info.take() else {
             println!("No submit info for frame.");
             return;
         };
         let Some(swapchain_image_index) = render_manager.swapchain_image_index.take() else {
-            println!("No swapchain image index for frame, probably resized.");
+            println!("No swapchain image index for frame.");
+//            swapchain.refresh(&vulkan, &Swapchain::create_info(window.width(), window.height())); 
+ //           swapchain_refreshed.0 = true;
             return;
         };
 

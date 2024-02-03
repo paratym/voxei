@@ -281,6 +281,17 @@ impl Swapchain {
         }
     }
 
+    pub fn create_info(width: u32, height: u32) -> SwapchainCreateInfo {
+        SwapchainCreateInfo {
+            width,
+            height,
+            create_image_views: false,
+            image_usage: vk::ImageUsageFlags::TRANSFER_DST,
+            preferred_image_count: 2,
+            preferred_present_mode: vk::PresentModeKHR::FIFO,
+        }
+    }
+
     pub fn instance(&self) -> &Arc<SwapchainInstance> {
         self.instance.as_ref().unwrap()
     }

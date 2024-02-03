@@ -10,6 +10,7 @@ use crate::{
                 swapchain::Swapchain,
                 vulkan::Vulkan,
             },
+            SwapchainRefreshed,
         },
         resource::{Res, ResMut},
     },
@@ -24,17 +25,19 @@ pub fn refresh_render_resources(
     swapchain: Res<Swapchain>,
     mut render_resource_manager: ResMut<RenderResourceManager>,
     voxel_pass: Res<VoxelRenderPass>,
+    swapchain_refreshed: Res<SwapchainRefreshed>,
 ) {
     let has_initialized = render_resource_manager.has_image(gfx_constants::BACKBUFFER_IMAGE_NAME);
 
-    if !has_initialized {
+    if !has_initialized || swapchain_refreshed.0 {
         create_backbuffer_image(
             &vulkan,
             &mut vulkan_memory_allocator,
             &swapchain,
             &mut render_resource_manager,
         );
-
+    }
+    if !has_initialized {
         // Voxel Compute Descriptor Set
         render_resource_manager.create_descriptor_sets(
             gfx_constants::VOXEL_DESCRIPTOR_SET_NAME,
