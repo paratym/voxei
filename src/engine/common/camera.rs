@@ -80,8 +80,8 @@ impl PrimaryCamera {
             let ry = mouse_delta.1.to_radians();
 
             let euler_angles = &mut primary_camera.euler_angles;
-            euler_angles.x += ry;
-            euler_angles.y += rx;
+            euler_angles.x += ry * 0.5;
+            euler_angles.y += rx * 0.5;
 
             // prevents weird behaviours when moving and looking up/down
             euler_angles.x = euler_angles.x.clamp(-FRAC_PI_2 + 0.001, FRAC_PI_2 - 0.001);

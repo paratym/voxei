@@ -113,6 +113,7 @@ impl Sponza {
             // Do gpu stuff
             let node_count = sponza.voxelized_octree.as_ref().unwrap().nodes().len();
             let size = size_of::<u64>() + (size_of::<u64>() * 2 + (8)) * node_count;
+            println!("node size: {}", size);
             let gpu_nodes = Buffer::new(
                 &vulkan,
                 &mut vulkan_memory_allocator,
@@ -126,6 +127,7 @@ impl Sponza {
 
             let material_count = sponza.voxelized_octree.as_ref().unwrap().materials().len();
             let size = size_of::<u64>() + /*padding */(size_of::<f32>() * 3) + (size_of::<f32>() * 4) * material_count;
+            println!("mat size: {}", size);
             println!("Material count: {}", material_count);
             let gpu_materials = Buffer::new(
                 &vulkan,

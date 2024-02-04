@@ -38,7 +38,7 @@ const uint SUBDIVISIONS = 6;
 #include "lib/intersect.glsl"
 
 vec4 calculate_lighting(vec3 p, vec3 n, vec3 rd) {
-  const vec3 LIGHT_POS = vec3(2.0, 2.0, 2.0);
+  const vec3 LIGHT_POS = vec3(2.0, 20, 2.0);
   vec3 light_dir = normalize(LIGHT_POS - p);
   float diffuse = max(dot(n, light_dir), 0.1);
 
@@ -142,7 +142,7 @@ TraceOutput trace(Ray ray) {
   // If the ray starts inside the svo, have the tenter be 0 since this seems to work
   root_t_corners.x = max(root_t_corners.x, 0.0);
   bool hit = root_t_corners.y >= root_t_corners.x;
-  vec3 color = vec3(0.1, 0.33, 0.58);
+  vec3 color = vec3(0.01, 0.05, 0.05);
   if(!hit) {
     return TraceOutput(false, vec3(0.0), color);
   }
@@ -164,7 +164,7 @@ TraceOutput trace(Ray ray) {
 
   bool dont_push = false;
   float h = root_t_corners.y;
-  for(uint i = 0; i < 1024; i++) {
+  for(uint i = 0; i < 2024; i++) {
     // Calculate the intersection of the ray with the current voxel
     vec3 tmin, tmax;
     vec2 tc = ray_voxel_intersection(ray, pos, depth, tmin, tmax);
@@ -178,11 +178,13 @@ TraceOutput trace(Ray ray) {
       if(node_index != 0 && !dont_push) {
         VoxelNode child = voxel_nodes[node_index];
         if (child.data_index != 0) {
-          const vec3 LIGHT_POS = vec3(0.0, 100.0, 0);
+          const vec3 LIGHT_POS = vec3(2.5, 3.5, 2.5);
           vec3 n = voxel_data[child.data_index].normal;
-          vec3 p = pos;
+          vec3 p = ray.origin + tc.x * ray.dir;
           vec3 p_to_light = normalize(LIGHT_POS - p);
-          color = max(dot(n, p_to_light), 0.1) * vec3(1.0, 0.4, 0.2);
+          color = pow(max(dot(n, p_to_light), 0.01) * 0.75 + 0.3, 1.2) * vec3(1.0, 0.4, 0.2);
+          // gamma correct
+          color = pow(color, vec3(2.2));
           break;
         }
 
