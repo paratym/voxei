@@ -5,6 +5,7 @@ pub mod geometry;
 pub mod graphics;
 pub mod input;
 pub mod model;
+pub mod physics;
 pub mod resource;
 pub mod system;
 pub mod voxel;

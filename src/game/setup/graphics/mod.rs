@@ -14,6 +14,7 @@ use crate::engine::graphics::SwapchainRefreshed;
 use crate::engine::window::window::{Window, WindowConfig};
 use crate::game::app::App;
 
+use crate::game::graphics::pipeline::fxaa::FxaaPass;
 use crate::game::graphics::pipeline::voxel::pass::VoxelRenderPass;
 use crate::settings::Settings;
 use crate::{
@@ -72,6 +73,13 @@ pub fn setup_graphical_resources(app: &mut App) {
         &mut vulkan_memory_allocator,
     );
 
+    let fxaa_pass = FxaaPass::new(
+        &mut app.resource_bank().get_resource_mut::<WatchedShaders>(),
+        &mut app.resource_bank().get_resource_mut::<Assets>(),
+        &vulkan,
+        &mut vulkan_memory_allocator,
+    );
+
     let primary_camera = PrimaryCamera::new(&vulkan, &mut vulkan_memory_allocator);
 
     app.resource_bank_mut().insert(window);
@@ -84,5 +92,6 @@ pub fn setup_graphical_resources(app: &mut App) {
     app.resource_bank_mut().insert(resource_manager);
     app.resource_bank_mut().insert(render_manager);
     app.resource_bank_mut().insert(voxel_render_pass);
+    app.resource_bank_mut().insert(fxaa_pass);
     app.resource_bank_mut().insert(primary_camera);
 }

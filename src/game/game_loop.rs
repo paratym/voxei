@@ -10,7 +10,7 @@ use super::{
     app::App,
     graphics::{
         self,
-        pipeline::{util as pipeline_util, voxel::pass::VoxelRenderPass},
+        pipeline::{fxaa::FxaaPass, util as pipeline_util, voxel::pass::VoxelRenderPass},
     },
     world::sponza::Sponza,
 };
@@ -35,9 +35,11 @@ pub fn game_loop(app: &mut App) {
     // Update render systems, any changes deps (swapchain, assets, lod, etc)
     execute_system(app, pipeline_util::refresh_render_resources);
     execute_system(app, VoxelRenderPass::update);
+    execute_system(app, FxaaPass::update);
 
     // Draw
     execute_system(app, VoxelRenderPass::render);
+    execute_system(app, FxaaPass::render);
     execute_system(app, graphics::set_submit_info);
     execute_system(app, RenderManager::submit_frame);
 

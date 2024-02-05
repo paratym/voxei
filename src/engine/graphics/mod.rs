@@ -2,6 +2,7 @@ use voxei_macros::Resource;
 
 use super::resource::ResMut;
 
+pub mod egui;
 pub mod pass;
 pub mod queues;
 pub mod render_manager;

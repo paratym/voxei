@@ -178,11 +178,11 @@ TraceOutput trace(Ray ray) {
       if(node_index != 0 && !dont_push) {
         VoxelNode child = voxel_nodes[node_index];
         if (child.data_index != 0) {
-          const vec3 LIGHT_POS = vec3(2.5, 3.5, 2.5);
+          const vec3 LIGHT_POS = vec3(2.5, 3.5, 3.5);
           vec3 n = voxel_data[child.data_index].normal;
           vec3 p = ray.origin + tc.x * ray.dir;
           vec3 p_to_light = normalize(LIGHT_POS - p);
-          color = pow(max(dot(n, p_to_light), 0.01) * 0.75 + 0.3, 1.2) * vec3(1.0, 0.4, 0.2);
+          color = pow(max(dot(n, p_to_light), 0.01) * 0.75 + 0.0, 1.0) * vec3(1.0, 0.4, 0.2);
           // gamma correct
           color = pow(color, vec3(2.2));
           break;
