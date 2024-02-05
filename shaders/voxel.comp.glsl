@@ -181,6 +181,7 @@ TraceOutput trace(Ray ray) {
           const vec3 LIGHT_POS = vec3(2.5, 3.5, 3.5);
           vec3 n = voxel_data[child.data_index].normal;
           vec3 p = ray.origin + tc.x * ray.dir;
+          p = pos;
           vec3 p_to_light = normalize(LIGHT_POS - p);
           color = pow(max(dot(n, p_to_light), 0.01) * 0.75 + 0.0, 1.0) * vec3(1.0, 0.4, 0.2);
           // gamma correct

@@ -46,8 +46,8 @@ void main() {
 
   float lumaRange = lumaMax - lumaMin;
 
-  const float EDGE_THRESHOLD_MIN = 0.0;
-  const float EDGE_THRESHOLD_MAX = 0.25;
+  const float EDGE_THRESHOLD_MIN = 0.001;
+  const float EDGE_THRESHOLD_MAX = 0.00001;
   if (lumaRange < max(EDGE_THRESHOLD_MIN, EDGE_THRESHOLD_MAX * lumaMax)) {
     imageStore(img_out, coord, vec4(color, 1.0));
     return;
