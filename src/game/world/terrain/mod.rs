@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use voxei_macros::Resource;
 
 use crate::engine::{
@@ -8,12 +10,10 @@ use crate::engine::{
 pub mod chunk;
 
 #[derive(Resource)]
-pub struct Terrain {}
+pub struct Terrain {
+    chunks: HashMap<(i32, i32), chunk::Chunk>,
+}
 
 impl Terrain {
-    pub fn new(vulkan: &Vulkan, vulkan_memory_allocator: &mut VulkanMemoryAllocator) -> Self {
-        Self {}
-    }
-
     pub fn update(terrain: ResMut<Terrain>) {}
 }

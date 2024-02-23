@@ -31,7 +31,7 @@ use crate::{
     },
     game::{
         graphics::{gfx_constants, pipeline::util as pipeline_util},
-        world::{sponza::Sponza, terrain::Terrain},
+        world::sponza::Sponza,
     },
 };
 
@@ -130,7 +130,6 @@ impl VoxelRenderPass {
         render_resource_manager: ResMut<RenderResourceManager>,
         frame_index: Res<FrameIndex>,
         primary_camera: Res<PrimaryCamera>,
-        terrain: Res<Terrain>,
         sponza: Res<Sponza>,
         swapchain_refreshed: Res<SwapchainRefreshed>,
     ) {

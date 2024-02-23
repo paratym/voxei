@@ -4,14 +4,13 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ash = { git = "https://github.com/ash-rs/ash", branch = "rwh-0.6" }
-ash-window = { git = "https://github.com/ash-rs/ash", branch = "rwh-0.6" }
 downcast = "0.11.0"
 egui-ash = "0.4.0"
 hecs = "0.10.4"
 nalgebra = "0.32.3"
 notify = "6.1.1"
 parking_lot = "0.12.1"
+paya = { path = "../paya/paya" }
 rapier3d = "0.18.0"
 raw-window-handle = "0.6.0"
 rayon = "1.8.0"

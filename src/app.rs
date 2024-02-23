@@ -1,17 +1,13 @@
+use paya::swapchain::Swapchain;
 use winit::event_loop::EventLoop;
 
 use crate::engine::{
-    graphics::{
-        vulkan::{swapchain::Swapchain, vulkan::Vulkan},
-        SwapchainRefreshed,
-    },
+    graphics::{device::DeviceResource, swapchain::SwapchainResource},
     input::Input,
     resource::ResourceBank,
     window::window::Window,
 };
 use winit::event::{Event as WinitEvent, WindowEvent as WinitWindowEvent};
-
-use super::game_loop::game_loop;
 
 pub struct App {
     event_loop: Option<EventLoop<()>>,
@@ -50,16 +46,12 @@ impl App {
                             window.exit();
                         }
                         WinitWindowEvent::Resized(new_size) => {
-                            let vulkan = self.resource_bank().get_resource::<Vulkan>();
-                            unsafe { vulkan.device().device_wait_idle().unwrap() };
                             self.resource_bank()
-                                .get_resource_mut::<SwapchainRefreshed>()
-                                .0 = true;
-                            self.resource_bank()
-                                .get_resource_mut::<Swapchain>()
-                                .refresh(
-                                    &vulkan,
-                                    &Swapchain::create_info(new_size.width, new_size.height),
+                                .get_resource_mut::<SwapchainResource>()
+                                .resize(
+                                    &mut self.resource_bank().get_resource_mut::<DeviceResource>(),
+                                    new_size.width,
+                                    new_size.height,
                                 );
                         }
                         event => {
@@ -74,7 +66,7 @@ impl App {
                             .handle_winit_device_event(device_id, event);
                     }
                     WinitEvent::AboutToWait => {
-                        game_loop(&mut self);
+                        crate::game_loop::game_loop(&mut self);
                     }
                     _ => {}
                 }
