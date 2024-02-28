@@ -22,4 +22,4 @@ slotmap = "1.0.7"
 tobj = "4.0.1"
 uuid = { version = "1.6.1", features = ["v4"] }
 voxei-macros = { path = "./macros" }
-winit =  "0.29.10"
+winit = "0.29.11"
