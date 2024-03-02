@@ -1,6 +1,6 @@
 use paya::{
     device::Device,
-    gpu_resources::GpuResourceId,
+    gpu_resources::{GpuResourceId, PackedGpuResourceId},
     pipeline::{ComputePipeline, ComputePipelineInfo, ShaderInfo},
 };
 
@@ -14,7 +14,8 @@ const PATH: &str = "shaders/ray_march.comp.glsl";
 
 #[repr(C)]
 pub struct RayMarchPushConstants {
-    pub backbuffer_image: GpuResourceId,
+    pub backbuffer_image: PackedGpuResourceId,
+    pub camera_buffer: PackedGpuResourceId,
 }
 
 pub struct VoxelRayMarchPipeline {

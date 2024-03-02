@@ -1,21 +1,41 @@
 #version 450
 
+#extension GL_EXT_shader_explicit_arithmetic_types_int32 : enable
+#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
+#extension GL_EXT_buffer_reference : enable
+#extension GL_EXT_debug_printf : enable
+
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
-layout (set = 0, binding = 0, rgba8) uniform image2D u_images[100];
+layout (set = 0, binding = 0) buffer BufferAddresses {
+  uint64_t addresses[];
+} u_addresses;
+layout (set = 0, binding = 1, rgba8) uniform image2D u_images[100];
 
 struct ResourceId {
-  uint id;
+  uint32_t id;
 };
 
 layout(push_constant) uniform PushConstants {
   ResourceId backbuffer_id;
+  ResourceId camera_id;
 } push_constants;
 
+layout(std430, buffer_reference, buffer_reference_align = 8) buffer Camera {
+  u32vec2 resolution;
+};
+
 void main() {
+  uint64_t cam_addr = u_addresses.addresses[push_constants.camera_id.id];
+  Camera camera = Camera(cam_addr);
   vec2 coord = gl_GlobalInvocationID.xy;
+
+  vec3 color = vec3(1.0);
+  if (coord.y > (camera.resolution.y / 2)) {
+    color.r = 0.0;
+  }
   uint index = push_constants.backbuffer_id.id & 0xFFFFF;
-  imageStore(u_images[index], ivec2(coord), vec4(1.0, 0.0, 0.0, 1.0));
+  imageStore(u_images[index], ivec2(coord), vec4(color, 1.0));
 }
 
 // #include "lib/types/voxel.glsl"

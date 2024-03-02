@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use shaderc::CompileOptions;
 
 use crate::engine::assets::asset::{AssetLoadError, AssetLoader};
@@ -34,6 +36,8 @@ impl AssetLoader for SpirVLoader {
             _ => panic!("Unknown shader extension: {}", file_extension),
         };
 
+        // TODO: remove this cause its not an issue with this app its nvim
+        std::thread::sleep(Duration::from_millis(100));
         let source = std::fs::read_to_string(file_path.clone()).unwrap();
 
         let mut options = CompileOptions::new().unwrap();
