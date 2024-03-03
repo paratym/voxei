@@ -22,7 +22,7 @@ impl SwapchainResource {
                 window_handle: window,
                 image_usage: ImageUsageFlags::TRANSFER_DST,
                 preferred_extent: (window.width(), window.height()),
-                max_frames_in_flight: constants::FRAMES_IN_FLIGHT as u32,
+                max_frames_in_flight: constants::MAX_FRAMES_IN_FLIGHT as u32,
             }),
         }
     }

@@ -1,5 +1,6 @@
 use nalgebra::{Isometry3, Vector3};
 
+#[derive(Clone, Debug)]
 pub struct Transform {
     pub isometry: Isometry3<f32>,
     pub scale: Vector3<f32>,

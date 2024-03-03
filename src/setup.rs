@@ -6,7 +6,7 @@ use crate::{
             loader::{obj::ObjLoader, octree::OctreeLoader, spirv::SpirVLoader},
             watched_shaders::WatchedShaders,
         },
-        common::time::Time,
+        common::{camera::PrimaryCamera, time::Time},
         graphics::{
             device::DeviceResource,
             render_manager::{self, RenderManager},
@@ -40,13 +40,14 @@ pub fn setup_resources(app: &mut crate::app::App) {
     );
     let mut device_resource = DeviceResource::new(&window);
     let swapchain_resource = SwapchainResource::new(&mut device_resource, &window);
-    let render_manager =
-        RenderManager::new(&mut assets, &mut watched_shaders, &mut device_resource);
+    let render_manager = RenderManager::new(&mut assets, &mut watched_shaders);
+    let primary_camera = PrimaryCamera::new(&mut device_resource);
 
     app.resource_bank_mut().insert(window);
     app.resource_bank_mut().insert(assets);
+    app.resource_bank_mut().insert(watched_shaders);
     app.resource_bank_mut().insert(device_resource);
     app.resource_bank_mut().insert(swapchain_resource);
     app.resource_bank_mut().insert(render_manager);
-    app.resource_bank_mut().insert(watched_shaders);
+    app.resource_bank_mut().insert(primary_camera);
 }

@@ -5,38 +5,93 @@
 #extension GL_EXT_buffer_reference : enable
 #extension GL_EXT_debug_printf : enable
 
-layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
-
 layout (set = 0, binding = 0) buffer BufferAddresses {
   uint64_t addresses[];
 } u_addresses;
 layout (set = 0, binding = 1, rgba8) uniform image2D u_images[100];
 
 struct ResourceId {
-  uint32_t id;
+  uint32_t index;
 };
 
-layout(push_constant) uniform PushConstants {
+#define DECL_PUSH_CONSTANTS layout(push_constant) uniform PushConstants
+#define DECL_BUFFER(alignment) layout(std430, buffer_reference, buffer_reference_align = alignment) buffer
+
+#define get_buffer(id, type) type(u_addresses.addresses[id.index]);
+#define get_storage_image(id) u_images[id.index]
+
+// Shader Specific Code
+layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+
+DECL_PUSH_CONSTANTS {
   ResourceId backbuffer_id;
   ResourceId camera_id;
 } push_constants;
 
-layout(std430, buffer_reference, buffer_reference_align = 8) buffer Camera {
+DECL_BUFFER(16) Camera {
+  mat4 view;
   u32vec2 resolution;
+  float aspect;
+  float fov;
 };
 
 void main() {
-  uint64_t cam_addr = u_addresses.addresses[push_constants.camera_id.id];
-  Camera camera = Camera(cam_addr);
-  vec2 coord = gl_GlobalInvocationID.xy;
+  Camera camera = get_buffer(push_constants.camera_id, Camera);
 
-  vec3 color = vec3(1.0);
-  if (coord.y > (camera.resolution.y / 2)) {
-    color.r = 0.0;
+  vec2 coord = gl_GlobalInvocationID.xy;
+  if(coord.x > camera.resolution.x || coord.y > camera.resolution.y) {
+    return;
   }
-  uint index = push_constants.backbuffer_id.id & 0xFFFFF;
-  imageStore(u_images[index], ivec2(coord), vec4(color, 1.0));
+
+  vec2 ndc = coord / camera.resolution;
+  vec2 uv = vec2(ndc.x * 2.0 - 1.0, 1 - 2 * ndc.y);
+  vec2 scaled_uv = vec2(uv.x * camera.aspect, uv.y) * tan(camera.fov / 2.0);
+
+  vec3 ro = vec3(vec4(0.0, 0.0, 0.0, 1.0) * camera.view);
+  vec3 rd = normalize(vec3(scaled_uv, 1.0)) * mat3(camera.view);
+
+  imageStore(get_storage_image(push_constants.backbuffer_id), ivec2(coord), vec4(rd, 1.0));
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 // #include "lib/types/voxel.glsl"
 // #include "lib/types/ray.glsl"

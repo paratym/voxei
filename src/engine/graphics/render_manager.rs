@@ -9,9 +9,13 @@ use paya::{
 };
 use voxei_macros::Resource;
 
-use crate::engine::{
-    assets::{asset::Assets, watched_shaders::WatchedShaders},
-    resource::{Res, ResMut},
+use crate::{
+    constants,
+    engine::{
+        assets::{asset::Assets, watched_shaders::WatchedShaders},
+        common::camera::{CameraBuffer, PrimaryCamera},
+        resource::{Res, ResMut},
+    },
 };
 
 use super::{
@@ -20,33 +24,16 @@ use super::{
     voxel::{RayMarchPushConstants, VoxelRayMarchPipeline},
 };
 
-#[repr(transparent)]
-pub struct CameraBuffer {
-    resolution: (u32, u32),
-}
-
 #[derive(Resource)]
 pub struct RenderManager {
     backbuffer: Option<ImageId>,
-    camera_buffer: BufferId,
     voxel_ray_march_pipeline: VoxelRayMarchPipeline,
 }
 
 impl RenderManager {
-    pub fn new(
-        assets: &mut Assets,
-        watched_shaders: &mut WatchedShaders,
-        device: &mut Device,
-    ) -> Self {
-        let camera_buffer = device.create_buffer(BufferInfo {
-            size: std::mem::size_of::<CameraBuffer>() as u64,
-            memory_flags: MemoryFlags::DEVICE_LOCAL,
-            usage: BufferUsageFlags::STORAGE | BufferUsageFlags::TRANSFER_DST,
-        });
-
+    pub fn new(assets: &mut Assets, watched_shaders: &mut WatchedShaders) -> Self {
         Self {
             backbuffer: None,
-            camera_buffer,
             voxel_ray_march_pipeline: VoxelRayMarchPipeline::new(assets, watched_shaders),
         }
     }
@@ -86,6 +73,7 @@ impl RenderManager {
         mut render_manager: ResMut<RenderManager>,
         mut device: ResMut<DeviceResource>,
         mut swapchain: ResMut<SwapchainResource>,
+        primary_camera: Res<PrimaryCamera>,
     ) {
         let Some(image_index) = swapchain.acquire_next_image() else {
             return;
@@ -108,18 +96,30 @@ impl RenderManager {
             usage: BufferUsageFlags::TRANSFER_SRC,
         });
 
+        // Update camera buffer
         {
             let ptr = device.map_buffer_typed::<CameraBuffer>(staging_buffer);
             unsafe {
                 ptr.write(CameraBuffer {
-                    resolution: (backbuffer_info.extent.width, backbuffer_info.extent.height),
+                    view_matrix: primary_camera
+                        .camera()
+                        .view()
+                        .as_slice()
+                        .try_into()
+                        .unwrap(),
+                    resolution: primary_camera.resolution(),
+                    aspect: primary_camera.aspect_ratio(),
+                    fov: primary_camera.fov(),
                 })
             };
         }
+        let camera_buffer_id = primary_camera
+            .buffer(device.cpu_frame_index() % constants::MAX_FRAMES_IN_FLIGHT as u64);
+
         command_recorder.copy_buffer_to_buffer(
             &device,
             staging_buffer,
-            render_manager.camera_buffer,
+            camera_buffer_id,
             std::mem::size_of::<CameraBuffer>() as u64,
         );
 
@@ -128,7 +128,7 @@ impl RenderManager {
         command_recorder.pipeline_barrier_buffer_transition(
             &device,
             BufferTransition {
-                buffer: render_manager.camera_buffer,
+                buffer: camera_buffer_id,
                 src_access: AccessFlags::TRANSFER_WRITE,
                 dst_access: AccessFlags::SHADER_READ,
             },
@@ -151,7 +151,7 @@ impl RenderManager {
             voxel_ray_march_pipeline,
             &RayMarchPushConstants {
                 backbuffer_image: backbuffer_index.pack(),
-                camera_buffer: render_manager.camera_buffer.pack(),
+                camera_buffer: camera_buffer_id.pack(),
             },
         );
 
@@ -212,5 +212,9 @@ impl RenderManager {
         });
 
         device.collect_garbage(swapchain.gpu_timeline_semaphore());
+    }
+
+    pub fn backbuffer(&self) -> Option<ImageId> {
+        self.backbuffer
     }
 }
