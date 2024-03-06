@@ -22,14 +22,13 @@ struct ResourceId {
 #define get_storage_image(id) u_images[id.index]
 
 // Shader Specific Code
-layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
+layout (local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
 
 DECL_PUSH_CONSTANTS {
-  ResourceId backbuffer_id;
-  ResourceId camera_id;
+  ResourceId voxel_buffer;
+  ResourceId sparse
 } push_constants;
 
-DECL_BUFFER(16) Camera {
-  u32vec2 resolution;
-  float aspect;
-};
+void main() {
+  uint32_t voxel_index = gl_GlobalInvocationID.x;
+}

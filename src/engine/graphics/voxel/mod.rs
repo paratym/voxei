@@ -16,6 +16,7 @@ const PATH: &str = "shaders/ray_march.comp.glsl";
 pub struct RayMarchPushConstants {
     pub backbuffer_image: PackedGpuResourceId,
     pub camera_buffer: PackedGpuResourceId,
+    pub voxel_model_buffer: PackedGpuResourceId,
 }
 
 pub struct VoxelRayMarchPipeline {

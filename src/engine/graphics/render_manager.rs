@@ -28,13 +28,41 @@ use super::{
 pub struct RenderManager {
     backbuffer: Option<ImageId>,
     voxel_ray_march_pipeline: VoxelRayMarchPipeline,
+    voxel_model_buffer: BufferId,
+}
+
+#[repr(C)]
+struct VoxelModelBuffer {
+    bounds: ((f32, f32, f32, f32), (f32, f32, f32, f32)),
+    unit_length: f32,
+    subdivisions: u32,
+    node_length: u32,
+}
+
+#[repr(C)]
+struct VoxelNode {
+    data_index: u32,
+    child_index: u32,
+    child_offsets: u64,
 }
 
 impl RenderManager {
-    pub fn new(assets: &mut Assets, watched_shaders: &mut WatchedShaders) -> Self {
+    pub fn new(
+        assets: &mut Assets,
+        watched_shaders: &mut WatchedShaders,
+        device: &mut Device,
+    ) -> Self {
+        let voxel_model_buffer = device.create_buffer(BufferInfo {
+            size: (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3)
+                as u64,
+            usage: BufferUsageFlags::STORAGE | BufferUsageFlags::TRANSFER_DST,
+            memory_flags: MemoryFlags::DEVICE_LOCAL,
+        });
+
         Self {
             backbuffer: None,
             voxel_ray_march_pipeline: VoxelRayMarchPipeline::new(assets, watched_shaders),
+            voxel_model_buffer,
         }
     }
 
@@ -70,7 +98,7 @@ impl RenderManager {
     }
 
     pub fn render(
-        mut render_manager: ResMut<RenderManager>,
+        render_manager: ResMut<RenderManager>,
         mut device: ResMut<DeviceResource>,
         mut swapchain: ResMut<SwapchainResource>,
         primary_camera: Res<PrimaryCamera>,
@@ -96,10 +124,23 @@ impl RenderManager {
             usage: BufferUsageFlags::TRANSFER_SRC,
         });
 
-        // Update camera buffer
+        let voxel_staging_buffer = device.create_buffer(BufferInfo {
+            size: (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3)
+                as u64,
+            memory_flags: MemoryFlags::HOST_VISIBLE | MemoryFlags::HOST_COHERENT,
+            usage: BufferUsageFlags::TRANSFER_SRC,
+        });
+
+        // Update buffers
         {
             let ptr = device.map_buffer_typed::<CameraBuffer>(staging_buffer);
             unsafe {
+                let view: [f32; 16] = primary_camera
+                    .camera()
+                    .view()
+                    .as_slice()
+                    .try_into()
+                    .unwrap();
                 ptr.write(CameraBuffer {
                     view_matrix: primary_camera
                         .camera()
@@ -112,6 +153,37 @@ impl RenderManager {
                     fov: primary_camera.fov(),
                 })
             };
+
+            let ptr = device.map_buffer_typed::<VoxelModelBuffer>(voxel_staging_buffer);
+            unsafe {
+                ptr.write(VoxelModelBuffer {
+                    bounds: ((0.0, 0.0, 0.0, 0.0), (1.0, 1.0, 1.0, 0.0)),
+                    unit_length: 0.5,
+                    subdivisions: 1,
+                    node_length: 3,
+                });
+                let ptr = ptr.offset(1) as *mut VoxelNode;
+                // First node needs to be null
+                ptr.write(VoxelNode {
+                    data_index: 0,
+                    child_index: 0,
+                    child_offsets: 0xFFFFFFFFFFFFFFFF,
+                });
+                // Child node with "data"
+                let ptr = ptr.offset(1);
+                ptr.write(VoxelNode {
+                    data_index: 1,
+                    child_index: 0,
+                    child_offsets: 0xFFFFFFFFFFFFFFFF,
+                });
+                // Root node
+                let ptr = ptr.offset(1);
+                ptr.write(VoxelNode {
+                    data_index: 0,
+                    child_index: 1,
+                    child_offsets: 0xFFFFFFFFFFFFFF00,
+                });
+            }
         }
         let camera_buffer_id = primary_camera
             .buffer(device.cpu_frame_index() % constants::MAX_FRAMES_IN_FLIGHT as u64);
@@ -122,8 +194,15 @@ impl RenderManager {
             camera_buffer_id,
             std::mem::size_of::<CameraBuffer>() as u64,
         );
+        command_recorder.copy_buffer_to_buffer(
+            &device,
+            voxel_staging_buffer,
+            render_manager.voxel_model_buffer,
+            (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3) as u64,
+        );
 
         command_recorder.destroy_buffer_deferred(staging_buffer);
+        command_recorder.destroy_buffer_deferred(voxel_staging_buffer);
 
         command_recorder.pipeline_barrier_buffer_transition(
             &device,
@@ -152,6 +231,7 @@ impl RenderManager {
             &RayMarchPushConstants {
                 backbuffer_image: backbuffer_index.pack(),
                 camera_buffer: camera_buffer_id.pack(),
+                voxel_model_buffer: render_manager.voxel_model_buffer.pack(),
             },
         );
 

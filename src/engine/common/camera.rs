@@ -124,12 +124,22 @@ impl PrimaryCamera {
 
         let mut speed = 1.0;
         if input.is_key_down(Key::LControl) {
-            speed = 10.0;
+            speed = 2.0;
         }
 
-        let translation = primary_camera.transform.isometry.rotation * delta.normalize() * speed;
-        primary_camera.transform.isometry.translation.vector +=
-            translation * speed * time.delta_time().as_secs_f32();
+        if delta.x != 0.0 || delta.y != 0.0 || delta.z != 0.0 {
+            let rotation = primary_camera.transform.isometry.rotation;
+            let up = Vector3::<f32>::y();
+            let mut forward = (rotation * Vector3::<f32>::z()).normalize();
+            let mut right = (rotation * Vector3::<f32>::x()).normalize();
+            forward.y = 0.0;
+            right.y = 0.0;
+
+            let translation = (delta.z * forward + delta.y * up + delta.x * right) * speed;
+
+            primary_camera.transform.isometry.translation.vector +=
+                translation * speed * time.delta_time().as_secs_f32();
+        }
 
         // Update camera matrices
         if let Some(backbuffer_id) = render_manager.backbuffer() {
