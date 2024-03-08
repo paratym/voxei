@@ -1,28 +1,3 @@
-#version 450
-
-#extension GL_EXT_shader_explicit_arithmetic_types_int32 : enable
-#extension GL_EXT_shader_explicit_arithmetic_types_int64 : enable
-#extension GL_EXT_buffer_reference : enable
-#extension GL_EXT_debug_printf : enable
-
-layout (set = 0, binding = 0) buffer BufferAddresses {
-  uint64_t addresses[];
-} u_addresses;
-layout (set = 0, binding = 1, rgba8) uniform image2D u_images[100];
-
-struct ResourceId {
-  uint32_t index;
-};
-
-#define DECL_PUSH_CONSTANTS layout(push_constant) uniform PushConstants
-#define DECL_BUFFER(alignment) layout(std430, buffer_reference, buffer_reference_align = alignment) buffer
-
-#define get_buffer(id, type) type(u_addresses.addresses[id.index]);
-#define get_storage_image(id) u_images[id.index]
-
-// ===================================================
-// SHADER SPECIFIC CODE BEGINS
-
 layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 
 #include "lib/types.glsl"
@@ -31,7 +6,8 @@ layout (local_size_x = 16, local_size_y = 16, local_size_z = 1) in;
 DECL_PUSH_CONSTANTS {
   ResourceId backbuffer_id;
   ResourceId camera_id;
-  ResourceId voxel_model_id;
+  ResourceId svo_id;
+  uint32_t subdivisions;
 } push_constants;
 
 DECL_BUFFER(16) Camera {
@@ -41,21 +17,13 @@ DECL_BUFFER(16) Camera {
   float fov;
 };
 
-DECL_BUFFER(16) VoxelModel {
-  AABB bounds;
-  float unit_length;
-  uint subdivisions;
-  uint nodes_length;
-  VoxelNode nodes[];
+DECL_BUFFER(16) SVOList {
+  uint node_length;
+  SVONode nodes[];
 };
 
-VoxelModel voxel_model() {
-  return get_buffer(push_constants.voxel_model_id, VoxelModel);
-}
-
 float get_half_length(uint depth) {
-  VoxelModel model = voxel_model();
-  return 0.5 * exp2(float(model.subdivisions - depth)) * model.unit_length;
+  return 0.5 * exp2(float(push_constants.subdivisions - depth));
 }
 
 // eg. ray_box_intersection(ray, vec3(0.0), 0)
@@ -118,10 +86,8 @@ vec3 get_child_position(vec3 parent_pos, uint child_local_morton, uint child_dep
   return parent_pos + (child_mask * half_length * 0.5);
 }
 
-uint get_child_node_index(uint parent_node_index, uint child_local_morton) {
-  VoxelModel model = voxel_model();
-  
-  VoxelNode parent_node = model.nodes[parent_node_index];
+uint get_child_node_index(uint parent_node_index, uint child_local_morton, inout SVOList svo_list) {
+  SVONode parent_node = svo_list.nodes[parent_node_index];
   uint child_node_index = parent_node.child_index;
   if(child_node_index == 0) {
     return 1;
@@ -147,9 +113,12 @@ struct StackItem {
 };
 
 TraceOutput trace(Ray ray) {
-  VoxelModel model = voxel_model();
+  SVOList svo_list = get_buffer(push_constants.svo_id, SVOList);
+  float side_length = 1 << push_constants.subdivisions;
+  float half_length = side_length / 2;
+  AABB bounds = AABB(vec3(-half_length), vec3(half_length));
 
-  vec2 root_t_corners = ray_aabb_intersection(ray, model.bounds);
+  vec2 root_t_corners = ray_aabb_intersection(ray, bounds);
   // If the ray starts inside the svo, have the tenter be 0 since this seems to work
   root_t_corners.x = max(root_t_corners.x, 0.0);
   bool hit = root_t_corners.y >= root_t_corners.x;
@@ -159,10 +128,10 @@ TraceOutput trace(Ray ray) {
   }
   color = vec3(0,1,0);
 
-  uint parent_node_index = model.nodes_length - 1;
-  VoxelNode parent_node = model.nodes[parent_node_index];
+  uint parent_node_index = svo_list.node_length - 1;
+  SVONode parent_node = svo_list.nodes[parent_node_index];
   // The center position of the root node.
-  vec3 root_pos = model.bounds.min + ((model.bounds.max - model.bounds.min) * 0.5);
+  vec3 root_pos = bounds.min + ((bounds.max - bounds.min) * 0.5);
   vec3 root_t_mid = (root_pos - ray.origin) * ray.inv_dir;
   uint first_child_local_morton = get_child_local_morton(ray, root_t_mid, root_t_corners);
   vec3 first_child_pos = get_child_position(root_pos, first_child_local_morton, 0);
@@ -176,7 +145,7 @@ TraceOutput trace(Ray ray) {
 
   bool dont_push = false;
   float h = root_t_corners.y;
-  for(uint i = 0; i < 2024; i++) {
+  for(uint i = 0; i < 128; i++) {
     // Calculate the intersection of the ray with the current voxel
     vec3 tmin, tmax;
     vec2 tc = ray_voxel_intersection(ray, pos, depth, tmin, tmax);
@@ -184,24 +153,12 @@ TraceOutput trace(Ray ray) {
     bool hit = tc.y >= tc.x;
     uint local_morton = morton & 7;
     if(hit) {
-      uint node_index = get_child_node_index(parent_node_index, local_morton);
+      uint node_index = get_child_node_index(parent_node_index, local_morton, svo_list);
       if(node_index != 0 && !dont_push) {
-        VoxelNode child = model.nodes[node_index];
+        SVONode child = svo_list.nodes[node_index];
         if (child.data_index != 0) {
           const vec3 LIGHT_POS = vec3(2.5, 3.5, 3.5);
-          color = vec3(0,0,0);
-          if((local_morton & 1) > 0) 
-          {
-            color.r = 1.0;
-          }
-          if((local_morton & 2) > 0) 
-          {
-            color.g = 1.0;
-          }
-          if((local_morton & 4) > 0) 
-          {
-            color.b = 1.0;
-          }
+          color = vec3(node_index/74.0);
           break;
         }
 
@@ -279,8 +236,8 @@ TraceOutput trace(Ray ray) {
       }
 
       // If ray exits models bounding box
-      vec3 min = model.bounds.min;
-      vec3 max = model.bounds.max;
+      vec3 min = bounds.min;
+      vec3 max = bounds.max;
       if(pos.x < min.x || pos.x > max.x ||
          pos.y < min.y || pos.y > max.y ||
          pos.z < min.z || pos.z > max.z) {

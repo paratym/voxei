@@ -6,3 +6,5 @@ pub const VULKAN_APP_NAME: &str = APP_NAME;
 pub const VULKAN_DEFAULT_QUEUE: &str = "vulkan_default";
 
 pub const MAX_FRAMES_IN_FLIGHT: usize = 2;
+
+pub const VOXEL_LENGTH: f32 = 0.01;

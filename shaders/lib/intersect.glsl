@@ -28,3 +28,6 @@ vec2 ray_aabb_intersection_extra(Ray ray, AABB aabb, out vec3 tmin, out vec3 tma
   return vec2(tenter, texit);
 }
 
+bool triangle_aabb_intersection(Triangle triangle, AABB aabb) {
+  return true;
+}

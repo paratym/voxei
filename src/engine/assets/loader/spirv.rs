@@ -1,11 +1,11 @@
 use std::time::Duration;
 
-use shaderc::CompileOptions;
+use paya::shader::ShaderCompiler;
 
 use crate::engine::assets::asset::{AssetLoadError, AssetLoader};
 
 pub struct SpirVLoader {
-    compiler: shaderc::Compiler,
+    compiler: ShaderCompiler,
 }
 
 impl AssetLoader for SpirVLoader {
@@ -16,7 +16,7 @@ impl AssetLoader for SpirVLoader {
         Self: Sized,
     {
         Self {
-            compiler: shaderc::Compiler::new().unwrap(),
+            compiler: ShaderCompiler::new(),
         }
     }
 
@@ -24,50 +24,7 @@ impl AssetLoader for SpirVLoader {
     where
         Self: Sized,
     {
-        let mut file_extension = file_path.split('.').last().unwrap();
-        if file_extension == "glsl" {
-            file_extension = file_path.split('.').nth_back(1).unwrap();
-        }
-
-        let shader_kind = match file_extension {
-            "vert" => shaderc::ShaderKind::Vertex,
-            "frag" => shaderc::ShaderKind::Fragment,
-            "comp" => shaderc::ShaderKind::Compute,
-            _ => panic!("Unknown shader extension: {}", file_extension),
-        };
-
-        // TODO: remove this cause its not an issue with this app its nvim
-        std::thread::sleep(Duration::from_millis(100));
-        let source = std::fs::read_to_string(file_path.clone()).unwrap();
-
-        let mut options = CompileOptions::new().unwrap();
-        options.set_include_callback(|name, include_type, source_path, _depth| {
-            let mut path = std::path::PathBuf::from(source_path);
-            path.pop();
-            path.push(name);
-            let source = std::fs::read_to_string(path.clone()).unwrap();
-            let mut result = shaderc::ResolvedInclude {
-                resolved_name: name.to_string(),
-                content: source,
-            };
-            if include_type == shaderc::IncludeType::Relative {
-                result.resolved_name = path.to_str().unwrap().to_string();
-            }
-            Ok(result)
-        });
-
-        if cfg!(debug_assertions) {
-            options.set_optimization_level(shaderc::OptimizationLevel::Zero);
-        } else {
-            options.set_optimization_level(shaderc::OptimizationLevel::Performance);
-        }
-
-        let binary_result = self
-            .compiler
-            .compile_into_spirv(&source, shader_kind, &file_path, "main", Some(&options))
-            .map_err(|err| AssetLoadError::new_invalid_file(file_path, err.to_string()))?;
-
-        Ok(binary_result.as_binary().to_vec())
+        Ok(self.compiler.load_from_file(file_path))
     }
 
     fn identifiers() -> &'static [&'static str] {

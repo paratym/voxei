@@ -10,7 +10,7 @@ use paya::{
 use voxei_macros::Resource;
 
 use crate::{
-    constants,
+    constants::{self, VOXEL_LENGTH},
     engine::{
         assets::{asset::Assets, watched_shaders::WatchedShaders},
         common::camera::{CameraBuffer, PrimaryCamera},
@@ -19,15 +19,20 @@ use crate::{
 };
 
 use super::{
+    common::{GTriangle, Vertex},
     device::DeviceResource,
     swapchain::SwapchainResource,
-    voxel::{RayMarchPushConstants, VoxelRayMarchPipeline},
+    voxel::{BuildSVOPushConstants, RayMarchPushConstants, VoxelPipeline, VoxelizePushConstants},
 };
 
 #[derive(Resource)]
 pub struct RenderManager {
     backbuffer: Option<ImageId>,
-    voxel_ray_march_pipeline: VoxelRayMarchPipeline,
+    voxel_pipeline: VoxelPipeline,
+
+    triangle_buffer: BufferId,
+    voxel_buffer: BufferId,
+    svo_buffer: BufferId,
     voxel_model_buffer: BufferId,
 }
 
@@ -46,13 +51,43 @@ struct VoxelNode {
     child_offsets: u64,
 }
 
+#[repr(C)]
+struct SVONode {
+    _glsl_content: (u32, u32, u32, u32),
+}
+
+const SIDE_LENGTH: u32 = 4;
+const VOXEL_ARRAY_SIZE: u32 = SIDE_LENGTH * SIDE_LENGTH * SIDE_LENGTH;
+const SVO_ARRAY_SIZE: u64 = (VOXEL_ARRAY_SIZE * 2) as u64;
+const TRIANGLE_INPUT_SIZE: u64 =
+    (std::mem::size_of::<u32>() + std::mem::size_of::<GTriangle>()) as u64;
+
 impl RenderManager {
     pub fn new(
         assets: &mut Assets,
         watched_shaders: &mut WatchedShaders,
         device: &mut Device,
     ) -> Self {
+        let triangle_buffer = device.create_buffer(BufferInfo {
+            name: "triangle_buffer".to_owned(),
+            size: TRIANGLE_INPUT_SIZE,
+            usage: BufferUsageFlags::STORAGE | BufferUsageFlags::TRANSFER_DST,
+            memory_flags: MemoryFlags::DEVICE_LOCAL,
+        });
+        let voxel_buffer = device.create_buffer(BufferInfo {
+            name: "voxel_buffer".to_owned(),
+            size: VOXEL_ARRAY_SIZE as u64 * 4,
+            usage: BufferUsageFlags::STORAGE,
+            memory_flags: MemoryFlags::DEVICE_LOCAL,
+        });
+        let svo_buffer = device.create_buffer(BufferInfo {
+            name: "svo_buffer".to_owned(),
+            size: SVO_ARRAY_SIZE * std::mem::size_of::<SVONode>() as u64 + 4,
+            usage: BufferUsageFlags::STORAGE,
+            memory_flags: MemoryFlags::DEVICE_LOCAL,
+        });
         let voxel_model_buffer = device.create_buffer(BufferInfo {
+            name: "svo_model_buffer".to_owned(),
             size: (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3)
                 as u64,
             usage: BufferUsageFlags::STORAGE | BufferUsageFlags::TRANSFER_DST,
@@ -61,7 +96,10 @@ impl RenderManager {
 
         Self {
             backbuffer: None,
-            voxel_ray_march_pipeline: VoxelRayMarchPipeline::new(assets, watched_shaders),
+            voxel_pipeline: VoxelPipeline::new(assets, watched_shaders),
+            triangle_buffer,
+            voxel_buffer,
+            svo_buffer,
             voxel_model_buffer,
         }
     }
@@ -93,7 +131,7 @@ impl RenderManager {
         }
 
         render_manager
-            .voxel_ray_march_pipeline
+            .voxel_pipeline
             .update(&device, &watched_shaders);
     }
 
@@ -112,19 +150,40 @@ impl RenderManager {
         };
         let backbuffer_info = device.get_image(backbuffer_index).info.clone();
 
-        if render_manager.voxel_ray_march_pipeline.pipeline().is_none() {
+        if render_manager.voxel_pipeline.ray_march_pipeline().is_none()
+            || render_manager.voxel_pipeline.voxelize_pipeline().is_none()
+            || render_manager.voxel_pipeline.build_svo_pipeline().is_none()
+        {
             return;
         }
 
         let mut command_recorder = device.create_command_recorder();
 
         let staging_buffer = device.create_buffer(BufferInfo {
+            name: "camera_staging_buffer".to_owned(),
             size: std::mem::size_of::<CameraBuffer>() as u64,
             memory_flags: MemoryFlags::HOST_VISIBLE | MemoryFlags::HOST_COHERENT,
             usage: BufferUsageFlags::TRANSFER_SRC,
         });
 
+        let triangles = vec![GTriangle {
+            vertices: (
+                Vertex::new(0.0, 0.0, 0.0),
+                Vertex::new(4.0, 0.0, 0.0),
+                Vertex::new(0.0, 0.0, 4.0),
+            ),
+        }];
+
+        let triangle_staging_buffer = device.create_buffer(BufferInfo {
+            name: "triangle_staging_buffer".to_owned(),
+            size: (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3)
+                as u64,
+            memory_flags: MemoryFlags::HOST_VISIBLE | MemoryFlags::HOST_COHERENT,
+            usage: BufferUsageFlags::TRANSFER_SRC,
+        });
+
         let voxel_staging_buffer = device.create_buffer(BufferInfo {
+            name: "voxel_staging_buffer".to_owned(),
             size: (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3)
                 as u64,
             memory_flags: MemoryFlags::HOST_VISIBLE | MemoryFlags::HOST_COHERENT,
@@ -133,14 +192,9 @@ impl RenderManager {
 
         // Update buffers
         {
-            let ptr = device.map_buffer_typed::<CameraBuffer>(staging_buffer);
+            let mapped_ptr = device.map_buffer_typed::<CameraBuffer>(staging_buffer);
+            let ptr = mapped_ptr.clone();
             unsafe {
-                let view: [f32; 16] = primary_camera
-                    .camera()
-                    .view()
-                    .as_slice()
-                    .try_into()
-                    .unwrap();
                 ptr.write(CameraBuffer {
                     view_matrix: primary_camera
                         .camera()
@@ -154,7 +208,19 @@ impl RenderManager {
                 })
             };
 
-            let ptr = device.map_buffer_typed::<VoxelModelBuffer>(voxel_staging_buffer);
+            let mapped_ptr = device.map_buffer_typed::<u32>(triangle_staging_buffer);
+            let ptr = mapped_ptr.clone();
+            unsafe {
+                ptr.write(triangles.len() as u32);
+                let mut ptr = ptr.offset(1) as *mut GTriangle;
+                for triangle in triangles {
+                    ptr.write(triangle);
+                    ptr = ptr.offset(1);
+                }
+            }
+
+            let mapped_ptr = device.map_buffer_typed::<VoxelModelBuffer>(voxel_staging_buffer);
+            let ptr = mapped_ptr.clone();
             unsafe {
                 ptr.write(VoxelModelBuffer {
                     bounds: ((0.0, 0.0, 0.0, 0.0), (1.0, 1.0, 1.0, 0.0)),
@@ -196,12 +262,19 @@ impl RenderManager {
         );
         command_recorder.copy_buffer_to_buffer(
             &device,
+            triangle_staging_buffer,
+            render_manager.triangle_buffer,
+            TRIANGLE_INPUT_SIZE,
+        );
+        command_recorder.copy_buffer_to_buffer(
+            &device,
             voxel_staging_buffer,
             render_manager.voxel_model_buffer,
             (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3) as u64,
         );
 
         command_recorder.destroy_buffer_deferred(staging_buffer);
+        command_recorder.destroy_buffer_deferred(triangle_staging_buffer);
         command_recorder.destroy_buffer_deferred(voxel_staging_buffer);
 
         command_recorder.pipeline_barrier_buffer_transition(
@@ -209,6 +282,79 @@ impl RenderManager {
             BufferTransition {
                 buffer: camera_buffer_id,
                 src_access: AccessFlags::TRANSFER_WRITE,
+                dst_access: AccessFlags::SHADER_READ,
+            },
+        );
+        command_recorder.pipeline_barrier_buffer_transition(
+            &device,
+            BufferTransition {
+                buffer: render_manager.triangle_buffer,
+                src_access: AccessFlags::TRANSFER_WRITE,
+                dst_access: AccessFlags::SHADER_READ,
+            },
+        );
+
+        // Voxelization pass
+        {
+            let voxelize_pipeline = render_manager.voxel_pipeline.voxelize_pipeline().unwrap();
+            command_recorder.bind_compute_pipeline(&device, voxelize_pipeline);
+            command_recorder.upload_push_constants(
+                &device,
+                voxelize_pipeline,
+                &VoxelizePushConstants {
+                    triangle_buffer: render_manager.triangle_buffer.pack(),
+                    voxel_buffer: render_manager.voxel_buffer.pack(),
+                    side_length: SIDE_LENGTH,
+                },
+            );
+            command_recorder.dispatch(
+                &device,
+                (VOXEL_ARRAY_SIZE as f32 / 16.0).ceil() as u32,
+                1,
+                1,
+            );
+        }
+
+        command_recorder.pipeline_barrier_buffer_transition(
+            &device,
+            BufferTransition {
+                buffer: render_manager.voxel_buffer,
+                src_access: AccessFlags::SHADER_WRITE,
+                dst_access: AccessFlags::SHADER_READ,
+            },
+        );
+
+        // SVO building pass
+        {
+            let build_svo_pipeline = render_manager.voxel_pipeline.build_svo_pipeline().unwrap();
+            command_recorder.bind_compute_pipeline(&device, build_svo_pipeline);
+
+            let subdivisions = f32::log2(SIDE_LENGTH as f32) as u32;
+            let mut head = 1;
+            for i in (0..=subdivisions).rev() {
+                let side_length = 1 << i;
+                let size = side_length * side_length * side_length;
+                command_recorder.upload_push_constants(
+                    &device,
+                    build_svo_pipeline,
+                    &BuildSVOPushConstants {
+                        voxel_buffer: render_manager.voxel_buffer.pack(),
+                        svo_buffer: render_manager.svo_buffer.pack(),
+                        head,
+                        size,
+                    },
+                );
+                command_recorder.dispatch(&device, (size as f32 / 16.0).ceil() as u32, 1, 1);
+
+                head += size;
+            }
+        }
+
+        command_recorder.pipeline_barrier_buffer_transition(
+            &device,
+            BufferTransition {
+                buffer: render_manager.svo_buffer,
+                src_access: AccessFlags::SHADER_WRITE,
                 dst_access: AccessFlags::SHADER_READ,
             },
         );
@@ -223,24 +369,29 @@ impl RenderManager {
                 dst_access: AccessFlags::SHADER_WRITE,
             },
         );
-        let voxel_ray_march_pipeline = render_manager.voxel_ray_march_pipeline.pipeline().unwrap();
-        command_recorder.bind_compute_pipeline(&device, voxel_ray_march_pipeline);
-        command_recorder.upload_push_constants(
-            &device,
-            voxel_ray_march_pipeline,
-            &RayMarchPushConstants {
-                backbuffer_image: backbuffer_index.pack(),
-                camera_buffer: camera_buffer_id.pack(),
-                voxel_model_buffer: render_manager.voxel_model_buffer.pack(),
-            },
-        );
 
-        command_recorder.dispatch(
-            &device,
-            (backbuffer_info.extent.width as f32 / 16.0).ceil() as u32,
-            (backbuffer_info.extent.height as f32 / 16.0).ceil() as u32,
-            1,
-        );
+        // Ray march pass
+        {
+            let voxel_ray_march_pipeline =
+                render_manager.voxel_pipeline.ray_march_pipeline().unwrap();
+            command_recorder.bind_compute_pipeline(&device, voxel_ray_march_pipeline);
+            command_recorder.upload_push_constants(
+                &device,
+                voxel_ray_march_pipeline,
+                &RayMarchPushConstants {
+                    backbuffer_image: backbuffer_index.pack(),
+                    camera_buffer: camera_buffer_id.pack(),
+                    voxel_model_buffer: render_manager.svo_buffer.pack(),
+                    subdivisions: f32::log2(SIDE_LENGTH as f32) as u32,
+                },
+            );
+            command_recorder.dispatch(
+                &device,
+                (backbuffer_info.extent.width as f32 / 16.0).ceil() as u32,
+                (backbuffer_info.extent.height as f32 / 16.0).ceil() as u32,
+                1,
+            );
+        }
 
         command_recorder.pipeline_barrier_image_transition(
             &device,

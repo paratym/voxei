@@ -47,8 +47,9 @@ impl PrimaryCamera {
         transform.isometry.translation.vector = Vector3::new(0.5, 0.0, -3.0);
 
         let buffers = (0..constants::MAX_FRAMES_IN_FLIGHT)
-            .map(|_| {
+            .map(|i| {
                 device.create_buffer(BufferInfo {
+                    name: format!("camera_buffer_{}", i).to_owned(),
                     size: std::mem::size_of::<CameraBuffer>() as u64,
                     memory_flags: MemoryFlags::DEVICE_LOCAL,
                     usage: BufferUsageFlags::STORAGE | BufferUsageFlags::TRANSFER_DST,
