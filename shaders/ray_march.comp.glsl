@@ -126,7 +126,6 @@ TraceOutput trace(Ray ray) {
   if(!hit) {
     return TraceOutput(false, vec3(0.0), color);
   }
-  color = vec3(0,1,0);
 
   uint parent_node_index = svo_list.node_length - 1;
   SVONode parent_node = svo_list.nodes[parent_node_index];
@@ -134,6 +133,7 @@ TraceOutput trace(Ray ray) {
   vec3 root_pos = bounds.min + ((bounds.max - bounds.min) * 0.5);
   vec3 root_t_mid = (root_pos - ray.origin) * ray.inv_dir;
   uint first_child_local_morton = get_child_local_morton(ray, root_t_mid, root_t_corners);
+  color = vec3(0,1,0);
   vec3 first_child_pos = get_child_position(root_pos, first_child_local_morton, 0);
 
   uint depth = 1u;
@@ -145,7 +145,7 @@ TraceOutput trace(Ray ray) {
 
   bool dont_push = false;
   float h = root_t_corners.y;
-  for(uint i = 0; i < 128; i++) {
+  for(uint i = 0; i < 512; i++) {
     // Calculate the intersection of the ray with the current voxel
     vec3 tmin, tmax;
     vec2 tc = ray_voxel_intersection(ray, pos, depth, tmin, tmax);
@@ -157,8 +157,14 @@ TraceOutput trace(Ray ray) {
       if(node_index != 0 && !dont_push) {
         SVONode child = svo_list.nodes[node_index];
         if (child.data_index != 0) {
-          const vec3 LIGHT_POS = vec3(2.5, 3.5, 3.5);
-          color = vec3(node_index/74.0);
+          color = vec3(0.1);
+          if(tmin.x == tc.x) {
+            color = vec3(0.3);
+          } else if(tmin.y == tc.x) {
+            color = vec3(0.7);
+          } else if(tmin.z == tc.x) {
+            color = vec3(0.9);
+          }
           break;
         }
 
@@ -241,6 +247,10 @@ TraceOutput trace(Ray ray) {
       if(pos.x < min.x || pos.x > max.x ||
          pos.y < min.y || pos.y > max.y ||
          pos.z < min.z || pos.z > max.z) {
+        if (pos.y > 0) {
+          color = vec3(0);
+        }
+
         break;
       }
 

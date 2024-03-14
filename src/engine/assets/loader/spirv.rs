@@ -1,8 +1,8 @@
 use std::time::Duration;
 
-use paya::shader::ShaderCompiler;
+use paya::shader::{CompilationError, ShaderCompiler};
 
-use crate::engine::assets::asset::{AssetLoadError, AssetLoader};
+use crate::engine::assets::asset::{AssetLoadError, AssetLoadErrorKind, AssetLoader};
 
 pub struct SpirVLoader {
     compiler: ShaderCompiler,
@@ -24,7 +24,16 @@ impl AssetLoader for SpirVLoader {
     where
         Self: Sized,
     {
-        Ok(self.compiler.load_from_file(file_path))
+        self.compiler
+            .load_from_file(file_path.clone())
+            .map_err(|err| match err {
+                CompilationError::Undefined { message } => {
+                    AssetLoadError::new_invalid_file(file_path, message)
+                }
+                CompilationError::CompilationErrors { message } => {
+                    AssetLoadError::new_invalid_file(file_path, message)
+                }
+            })
     }
 
     fn identifiers() -> &'static [&'static str] {

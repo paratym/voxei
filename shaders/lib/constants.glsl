@@ -1,1 +1,1 @@
-const float VOXEL_UNIT_LENGTH = 0.01;
+const float VOXEL_UNIT_LENGTH = 1;

@@ -27,9 +27,11 @@ pub struct RayMarchPushConstants {
 
 #[repr(C)]
 pub struct VoxelizePushConstants {
-    pub triangle_buffer: PackedGpuResourceId,
+    pub vertices_buffer: PackedGpuResourceId,
+    pub indices_buffer: PackedGpuResourceId,
     pub voxel_buffer: PackedGpuResourceId,
     pub side_length: u32,
+    pub triangle_count: u32,
 }
 
 #[repr(C)]

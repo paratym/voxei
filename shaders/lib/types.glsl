@@ -24,7 +24,7 @@ struct Vertex {
 };
 
 struct Triangle {
-  Vertex a;
-  Vertex b;
-  Vertex c;
+  Vertex v0;
+  Vertex v1;
+  Vertex v2;
 };

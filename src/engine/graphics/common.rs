@@ -1,3 +1,4 @@
+#[derive(Debug)]
 #[repr(C)]
 pub struct Vertex {
     pub position: (f32, f32, f32),
@@ -13,7 +14,8 @@ impl Vertex {
     }
 }
 
+#[derive(Debug)]
 #[repr(C)]
 pub struct GTriangle {
-    pub vertices: (Vertex, Vertex, Vertex),
+    pub vertices: (Vertex, Vertex, Vertex, Vertex),
 }

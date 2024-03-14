@@ -9,6 +9,7 @@ use std::{
         atomic::{self, AtomicBool},
         Arc,
     },
+    time::Duration,
 };
 
 use notify::Watcher;
@@ -319,6 +320,8 @@ impl<T: Send + Sync + 'static> WatchedHandle<T> {
                                         .as_str(),
                                 )
                         }) {
+                            // TODO: figure out why this is needed
+                            std::thread::sleep(Duration::from_millis(5));
                             watcher_should_reload.store(true, atomic::Ordering::Relaxed);
                         }
                     }

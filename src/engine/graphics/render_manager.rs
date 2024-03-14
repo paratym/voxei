@@ -13,7 +13,10 @@ use crate::{
     constants::{self, VOXEL_LENGTH},
     engine::{
         assets::{asset::Assets, watched_shaders::WatchedShaders},
-        common::camera::{CameraBuffer, PrimaryCamera},
+        common::{
+            camera::{CameraBuffer, PrimaryCamera},
+            time::Time,
+        },
         resource::{Res, ResMut},
     },
 };
@@ -30,7 +33,8 @@ pub struct RenderManager {
     backbuffer: Option<ImageId>,
     voxel_pipeline: VoxelPipeline,
 
-    triangle_buffer: BufferId,
+    vertices_buffer: BufferId,
+    indices_buffer: BufferId,
     voxel_buffer: BufferId,
     svo_buffer: BufferId,
     voxel_model_buffer: BufferId,
@@ -56,11 +60,11 @@ struct SVONode {
     _glsl_content: (u32, u32, u32, u32),
 }
 
-const SIDE_LENGTH: u32 = 4;
+const SIDE_LENGTH: u32 = 32;
 const VOXEL_ARRAY_SIZE: u32 = SIDE_LENGTH * SIDE_LENGTH * SIDE_LENGTH;
 const SVO_ARRAY_SIZE: u64 = (VOXEL_ARRAY_SIZE * 2) as u64;
-const TRIANGLE_INPUT_SIZE: u64 =
-    (std::mem::size_of::<u32>() + std::mem::size_of::<GTriangle>()) as u64;
+const VERTICES_BUFFER_SIZE: u64 = (std::mem::size_of::<f32>() * 9) as u64;
+const INDICES_BUFFER_SIZE: u64 = (std::mem::size_of::<u32>() * 3) as u64;
 
 impl RenderManager {
     pub fn new(
@@ -68,10 +72,20 @@ impl RenderManager {
         watched_shaders: &mut WatchedShaders,
         device: &mut Device,
     ) -> Self {
-        let triangle_buffer = device.create_buffer(BufferInfo {
-            name: "triangle_buffer".to_owned(),
-            size: TRIANGLE_INPUT_SIZE,
-            usage: BufferUsageFlags::STORAGE | BufferUsageFlags::TRANSFER_DST,
+        let vertices_buffer = device.create_buffer(BufferInfo {
+            name: "vertices_buffer".to_owned(),
+            size: VERTICES_BUFFER_SIZE,
+            usage: BufferUsageFlags::STORAGE
+                | BufferUsageFlags::TRANSFER_DST
+                | BufferUsageFlags::VERTEX,
+            memory_flags: MemoryFlags::DEVICE_LOCAL,
+        });
+        let indices_buffer = device.create_buffer(BufferInfo {
+            name: "indices_buffer".to_owned(),
+            size: INDICES_BUFFER_SIZE,
+            usage: BufferUsageFlags::STORAGE
+                | BufferUsageFlags::TRANSFER_DST
+                | BufferUsageFlags::INDEX,
             memory_flags: MemoryFlags::DEVICE_LOCAL,
         });
         let voxel_buffer = device.create_buffer(BufferInfo {
@@ -97,7 +111,8 @@ impl RenderManager {
         Self {
             backbuffer: None,
             voxel_pipeline: VoxelPipeline::new(assets, watched_shaders),
-            triangle_buffer,
+            vertices_buffer,
+            indices_buffer,
             voxel_buffer,
             svo_buffer,
             voxel_model_buffer,
@@ -140,6 +155,7 @@ impl RenderManager {
         mut device: ResMut<DeviceResource>,
         mut swapchain: ResMut<SwapchainResource>,
         primary_camera: Res<PrimaryCamera>,
+        time: Res<Time>,
     ) {
         let Some(image_index) = swapchain.acquire_next_image() else {
             return;
@@ -166,18 +182,34 @@ impl RenderManager {
             usage: BufferUsageFlags::TRANSFER_SRC,
         });
 
-        let triangles = vec![GTriangle {
-            vertices: (
-                Vertex::new(0.0, 0.0, 0.0),
-                Vertex::new(4.0, 0.0, 0.0),
-                Vertex::new(0.0, 0.0, 4.0),
-            ),
-        }];
+        let rot_per_sec = 0.25;
+        let delta_angle = (std::f32::consts::PI * 2.0)
+            * time.total_duration().as_millis() as f32
+            * 0.001
+            * rot_per_sec;
+        let v0_angle = 0.0 + delta_angle;
+        let v1_angle = std::f32::consts::FRAC_PI_3 * 2.0 + delta_angle;
+        let v2_angle = std::f32::consts::FRAC_PI_3 * 4.0 + delta_angle;
+        let radius = 10.0;
+        let vertices = vec![
+            // V0
+            radius * v0_angle.cos(),
+            0.5,
+            radius * v0_angle.sin(),
+            // V1
+            radius * v1_angle.cos(),
+            0.5,
+            radius * v1_angle.sin(),
+            // V2
+            radius * v2_angle.cos(),
+            0.5,
+            radius * v2_angle.sin(),
+        ];
+        let indices = vec![0, 1, 2];
 
         let triangle_staging_buffer = device.create_buffer(BufferInfo {
             name: "triangle_staging_buffer".to_owned(),
-            size: (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3)
-                as u64,
+            size: INDICES_BUFFER_SIZE + VERTICES_BUFFER_SIZE,
             memory_flags: MemoryFlags::HOST_VISIBLE | MemoryFlags::HOST_COHERENT,
             usage: BufferUsageFlags::TRANSFER_SRC,
         });
@@ -211,10 +243,14 @@ impl RenderManager {
             let mapped_ptr = device.map_buffer_typed::<u32>(triangle_staging_buffer);
             let ptr = mapped_ptr.clone();
             unsafe {
-                ptr.write(triangles.len() as u32);
-                let mut ptr = ptr.offset(1) as *mut GTriangle;
-                for triangle in triangles {
-                    ptr.write(triangle);
+                let mut ptr = ptr as *mut u32;
+                for index in indices.iter() {
+                    ptr.write(*index);
+                    ptr = ptr.offset(1);
+                }
+                let mut ptr = ptr as *mut f32;
+                for vertex in vertices.iter() {
+                    ptr.write(*vertex);
                     ptr = ptr.offset(1);
                 }
             }
@@ -257,19 +293,33 @@ impl RenderManager {
         command_recorder.copy_buffer_to_buffer(
             &device,
             staging_buffer,
+            0,
             camera_buffer_id,
+            0,
             std::mem::size_of::<CameraBuffer>() as u64,
         );
         command_recorder.copy_buffer_to_buffer(
             &device,
             triangle_staging_buffer,
-            render_manager.triangle_buffer,
-            TRIANGLE_INPUT_SIZE,
+            0,
+            render_manager.indices_buffer,
+            0,
+            INDICES_BUFFER_SIZE,
+        );
+        command_recorder.copy_buffer_to_buffer(
+            &device,
+            triangle_staging_buffer,
+            INDICES_BUFFER_SIZE,
+            render_manager.vertices_buffer,
+            0,
+            VERTICES_BUFFER_SIZE,
         );
         command_recorder.copy_buffer_to_buffer(
             &device,
             voxel_staging_buffer,
+            0,
             render_manager.voxel_model_buffer,
+            0,
             (std::mem::size_of::<VoxelModelBuffer>() + std::mem::size_of::<VoxelNode>() * 3) as u64,
         );
 
@@ -288,7 +338,15 @@ impl RenderManager {
         command_recorder.pipeline_barrier_buffer_transition(
             &device,
             BufferTransition {
-                buffer: render_manager.triangle_buffer,
+                buffer: render_manager.vertices_buffer,
+                src_access: AccessFlags::TRANSFER_WRITE,
+                dst_access: AccessFlags::SHADER_READ,
+            },
+        );
+        command_recorder.pipeline_barrier_buffer_transition(
+            &device,
+            BufferTransition {
+                buffer: render_manager.indices_buffer,
                 src_access: AccessFlags::TRANSFER_WRITE,
                 dst_access: AccessFlags::SHADER_READ,
             },
@@ -302,9 +360,11 @@ impl RenderManager {
                 &device,
                 voxelize_pipeline,
                 &VoxelizePushConstants {
-                    triangle_buffer: render_manager.triangle_buffer.pack(),
+                    vertices_buffer: render_manager.vertices_buffer.pack(),
+                    indices_buffer: render_manager.indices_buffer.pack(),
                     voxel_buffer: render_manager.voxel_buffer.pack(),
                     side_length: SIDE_LENGTH,
+                    triangle_count: indices.len() as u32 / 3,
                 },
             );
             command_recorder.dispatch(
