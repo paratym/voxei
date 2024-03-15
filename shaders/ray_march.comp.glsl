@@ -10,13 +10,6 @@ DECL_PUSH_CONSTANTS {
   uint32_t subdivisions;
 } push_constants;
 
-DECL_BUFFER(16) Camera {
-  mat4 view;
-  u32vec2 resolution;
-  float aspect;
-  float fov;
-};
-
 DECL_BUFFER(16) SVOList {
   uint node_length;
   SVONode nodes[];
@@ -133,7 +126,6 @@ TraceOutput trace(Ray ray) {
   vec3 root_pos = bounds.min + ((bounds.max - bounds.min) * 0.5);
   vec3 root_t_mid = (root_pos - ray.origin) * ray.inv_dir;
   uint first_child_local_morton = get_child_local_morton(ray, root_t_mid, root_t_corners);
-  color = vec3(0,1,0);
   vec3 first_child_pos = get_child_position(root_pos, first_child_local_morton, 0);
 
   uint depth = 1u;
@@ -247,10 +239,6 @@ TraceOutput trace(Ray ray) {
       if(pos.x < min.x || pos.x > max.x ||
          pos.y < min.y || pos.y > max.y ||
          pos.z < min.z || pos.z > max.z) {
-        if (pos.y > 0) {
-          color = vec3(0);
-        }
-
         break;
       }
 
@@ -283,8 +271,8 @@ void main() {
   vec2 uv = vec2(ndc.x * 2.0 - 1.0, 1 - 2 * ndc.y);
   vec2 scaled_uv = vec2(uv.x * camera.aspect, uv.y) * tan(camera.fov / 2.0);
 
-  vec3 ro = vec3(vec4(0.0, 0.0, 0.0, 1.0) * camera.view);
-  vec3 rd = normalize(vec3(scaled_uv, 1.0)) * mat3(camera.view);
+  vec3 ro = vec3(vec4(0.0, 0.0, 0.0, 1.0) * camera.transform);
+  vec3 rd = normalize(vec3(scaled_uv, 1.0)) * mat3(camera.transform);
 
   Ray ray = Ray(ro, rd, 1.0 / rd);
 

@@ -1,4 +1,6 @@
-use nalgebra::{Isometry3, Vector3};
+use std::ops::Neg;
+
+use nalgebra::{Isometry3, UnitQuaternion, Vector3};
 
 #[derive(Clone, Debug)]
 pub struct Transform {

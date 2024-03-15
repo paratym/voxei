@@ -78,25 +78,6 @@ void main() {
 
     AABB voxel_aabb = AABB(voxel_min, voxel_max);
 
-    // if(voxel_min.x != tri_min.x) {
-    //   voxel_aabb.min.x += 0.0001;
-    // }
-    // if(voxel_max.x != tri_max.x) {
-    //   voxel_aabb.max.x -= 0.0001;
-    // }
-    // if(voxel_min.y != tri_min.y) {
-    //   voxel_aabb.min.y += 0.0001;
-    // }
-    // if(voxel_max.y != tri_max.y) {
-    //   voxel_aabb.max.y -= 0.0001;
-    // }
-    // if(voxel_min.z != tri_min.z) {
-    //   voxel_aabb.min.z += 0.0001;
-    // }
-    // if(voxel_max.z != tri_max.z) {
-    //   voxel_aabb.max.z -= 0.0001;
-    // }
-
     bool intersects = triangle_aabb_intersection(tri, voxel_aabb);
     if(intersects) {
       voxel_list.data[index] = intersects ? 1 : 0;

@@ -1,6 +1,6 @@
 use std::f32::consts::FRAC_PI_2;
 
-use nalgebra::{UnitQuaternion, Vector3};
+use nalgebra::{Isometry3, Matrix4, Point3, UnitQuaternion, Vector3};
 use paya::allocator::MemoryFlags;
 use paya::common::BufferUsageFlags;
 use paya::device::Device;
@@ -21,7 +21,9 @@ use super::transform::Transform;
 
 #[repr(C)]
 pub struct CameraBuffer {
+    pub transform_matrix: [f32; 16],
     pub view_matrix: [f32; 16],
+    pub proj_view_matrix: [f32; 16],
     pub resolution: (u32, u32),
     pub aspect: f32,
     pub fov: f32,
@@ -44,7 +46,7 @@ pub struct PrimaryCamera {
 impl PrimaryCamera {
     pub fn new(device: &mut Device) -> Self {
         let mut transform = Transform::new();
-        transform.isometry.translation.vector = Vector3::new(0.5, 0.0, -3.0);
+        transform.isometry.translation.vector = Vector3::new(0.0, 0.0, 0.0);
 
         let buffers = (0..constants::MAX_FRAMES_IN_FLIGHT)
             .map(|i| {
@@ -123,9 +125,9 @@ impl PrimaryCamera {
             delta.y -= 1.0;
         }
 
-        let mut speed = 1.0;
+        let mut speed = 4.0;
         if input.is_key_down(Key::LControl) {
-            speed = 2.0;
+            speed = 8.0;
         }
 
         if delta.x != 0.0 || delta.y != 0.0 || delta.z != 0.0 {
@@ -136,7 +138,7 @@ impl PrimaryCamera {
             forward.y = 0.0;
             right.y = 0.0;
 
-            let translation = (delta.z * forward + delta.y * up + delta.x * right) * speed;
+            let translation = (delta.z * forward + delta.y * up + delta.x * right).normalize();
 
             primary_camera.transform.isometry.translation.vector +=
                 translation * speed * time.delta_time().as_secs_f32();
@@ -195,6 +197,7 @@ impl PrimaryCamera {
 
 pub struct Camera {
     view: nalgebra::Matrix4<f32>,
+    transform: nalgebra::Matrix4<f32>,
     projection: nalgebra::Matrix4<f32>,
     proj_view: nalgebra::Matrix4<f32>,
 }
@@ -203,20 +206,31 @@ impl Camera {
     pub fn new() -> Self {
         Self {
             view: nalgebra::Matrix4::identity(),
+            transform: nalgebra::Matrix4::identity(),
             projection: nalgebra::Matrix4::identity(),
             proj_view: nalgebra::Matrix4::identity(),
         }
     }
 
     pub fn refresh_projection(&mut self, aspect_ratio: f32, fov: f32, near: f32, far: f32) {
-        self.projection =
-            nalgebra::Perspective3::new(aspect_ratio, fov, near, far).to_homogeneous();
+        self.projection = nalgebra::Perspective3::new(aspect_ratio, fov, near, far)
+            .as_matrix()
+            .clone();
         self.proj_view = self.projection * self.view;
     }
 
     pub fn refresh_view(&mut self, transform: Transform) {
-        self.view = transform.to_matrix().transpose();
+        self.transform = transform.to_matrix().transpose();
+
+        let eye = transform.isometry.translation.vector;
+        let target = eye + transform.isometry * Vector3::z();
+        self.view =
+            Isometry3::look_at_rh(&eye.into(), &target.into(), &-Vector3::y()).to_homogeneous();
         self.proj_view = self.projection * self.view;
+    }
+
+    pub fn transform(&self) -> &nalgebra::Matrix4<f32> {
+        &self.transform
     }
 
     pub fn view(&self) -> &nalgebra::Matrix4<f32> {

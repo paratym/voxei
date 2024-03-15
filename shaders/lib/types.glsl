@@ -28,3 +28,12 @@ struct Triangle {
   Vertex v1;
   Vertex v2;
 };
+
+DECL_BUFFER(16) Camera {
+  mat4 transform;
+  mat4 view;
+  mat4 projView;
+  u32vec2 resolution;
+  float aspect;
+  float fov;
+};

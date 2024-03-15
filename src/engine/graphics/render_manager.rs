@@ -1,8 +1,9 @@
 use paya::{
     allocator::MemoryFlags,
+    command_recorder::{BeginRenderingInfo, RenderingAttachment},
     common::{
-        AccessFlags, BufferTransition, BufferUsageFlags, Extent2D, Extent3D, Format, ImageLayout,
-        ImageTransition, ImageUsageFlags,
+        AccessFlags, AttachmentLoadOp, AttachmentStoreOp, BufferTransition, BufferUsageFlags,
+        ClearValue, Extent2D, Extent3D, Format, ImageLayout, ImageTransition, ImageUsageFlags,
     },
     device::{Device, ImageInfo, PresentInfo, SubmitInfo},
     gpu_resources::{BufferId, BufferInfo, ImageId},
@@ -22,7 +23,7 @@ use crate::{
 };
 
 use super::{
-    common::{GTriangle, Vertex},
+    debug::{DebugPipeline, DebugPushConstants},
     device::DeviceResource,
     swapchain::SwapchainResource,
     voxel::{BuildSVOPushConstants, RayMarchPushConstants, VoxelPipeline, VoxelizePushConstants},
@@ -32,6 +33,7 @@ use super::{
 pub struct RenderManager {
     backbuffer: Option<ImageId>,
     voxel_pipeline: VoxelPipeline,
+    debug_pipeline: DebugPipeline,
 
     vertices_buffer: BufferId,
     indices_buffer: BufferId,
@@ -60,7 +62,7 @@ struct SVONode {
     _glsl_content: (u32, u32, u32, u32),
 }
 
-const SIDE_LENGTH: u32 = 32;
+const SIDE_LENGTH: u32 = 64;
 const VOXEL_ARRAY_SIZE: u32 = SIDE_LENGTH * SIDE_LENGTH * SIDE_LENGTH;
 const SVO_ARRAY_SIZE: u64 = (VOXEL_ARRAY_SIZE * 2) as u64;
 const VERTICES_BUFFER_SIZE: u64 = (std::mem::size_of::<f32>() * 9) as u64;
@@ -111,6 +113,7 @@ impl RenderManager {
         Self {
             backbuffer: None,
             voxel_pipeline: VoxelPipeline::new(assets, watched_shaders),
+            debug_pipeline: DebugPipeline::new(assets, watched_shaders),
             vertices_buffer,
             indices_buffer,
             voxel_buffer,
@@ -137,7 +140,9 @@ impl RenderManager {
 
             let image = device.create_image(ImageInfo {
                 extent: Extent3D::from(swapchain.info().extent),
-                usage: ImageUsageFlags::TRANSFER_SRC | ImageUsageFlags::STORAGE,
+                usage: ImageUsageFlags::TRANSFER_SRC
+                    | ImageUsageFlags::STORAGE
+                    | ImageUsageFlags::COLOR_ATTACHMENT,
                 format: Format::R8G8B8A8Unorm,
                 ..Default::default()
             });
@@ -147,6 +152,9 @@ impl RenderManager {
 
         render_manager
             .voxel_pipeline
+            .update(&device, &watched_shaders);
+        render_manager
+            .debug_pipeline
             .update(&device, &watched_shaders);
     }
 
@@ -169,6 +177,7 @@ impl RenderManager {
         if render_manager.voxel_pipeline.ray_march_pipeline().is_none()
             || render_manager.voxel_pipeline.voxelize_pipeline().is_none()
             || render_manager.voxel_pipeline.build_svo_pipeline().is_none()
+            || render_manager.debug_pipeline.debug_pipeline().is_none()
         {
             return;
         }
@@ -182,7 +191,7 @@ impl RenderManager {
             usage: BufferUsageFlags::TRANSFER_SRC,
         });
 
-        let rot_per_sec = 0.25;
+        let rot_per_sec = 0.15;
         let delta_angle = (std::f32::consts::PI * 2.0)
             * time.total_duration().as_millis() as f32
             * 0.001
@@ -190,19 +199,19 @@ impl RenderManager {
         let v0_angle = 0.0 + delta_angle;
         let v1_angle = std::f32::consts::FRAC_PI_3 * 2.0 + delta_angle;
         let v2_angle = std::f32::consts::FRAC_PI_3 * 4.0 + delta_angle;
-        let radius = 10.0;
+        let radius = 30.0;
         let vertices = vec![
             // V0
             radius * v0_angle.cos(),
-            0.5,
+            radius * v0_angle.sin(),
             radius * v0_angle.sin(),
             // V1
             radius * v1_angle.cos(),
-            0.5,
+            radius * v1_angle.cos(),
             radius * v1_angle.sin(),
             // V2
             radius * v2_angle.cos(),
-            0.5,
+            radius * v2_angle.sin(),
             radius * v2_angle.sin(),
         ];
         let indices = vec![0, 1, 2];
@@ -228,9 +237,21 @@ impl RenderManager {
             let ptr = mapped_ptr.clone();
             unsafe {
                 ptr.write(CameraBuffer {
+                    transform_matrix: primary_camera
+                        .camera()
+                        .transform()
+                        .as_slice()
+                        .try_into()
+                        .unwrap(),
                     view_matrix: primary_camera
                         .camera()
                         .view()
+                        .as_slice()
+                        .try_into()
+                        .unwrap(),
+                    proj_view_matrix: primary_camera
+                        .camera()
+                        .proj_view()
                         .as_slice()
                         .try_into()
                         .unwrap(),
@@ -459,10 +480,61 @@ impl RenderManager {
                 image: backbuffer_index,
                 src_layout: ImageLayout::General,
                 src_access: AccessFlags::SHADER_WRITE,
+                dst_layout: ImageLayout::ColorAttachmentOptimal,
+                dst_access: AccessFlags::SHADER_WRITE,
+            },
+        );
+
+        // Debug raster pass
+        {
+            command_recorder.bind_graphics_pipeline(
+                &device,
+                render_manager.debug_pipeline.debug_pipeline().unwrap(),
+            );
+            command_recorder.begin_rendering(
+                &device,
+                &BeginRenderingInfo {
+                    render_area: backbuffer_info.extent.into(),
+                    color_attachments: vec![RenderingAttachment {
+                        image: backbuffer_index,
+                        layout: ImageLayout::ColorAttachmentOptimal,
+                        load_op: AttachmentLoadOp::Store,
+                        store_op: AttachmentStoreOp::Store,
+                        clear_value: ClearValue::None,
+                    }],
+                },
+            );
+
+            command_recorder.set_vertex_buffer(&device, render_manager.vertices_buffer);
+            command_recorder.set_index_buffer(&device, render_manager.indices_buffer);
+
+            command_recorder.set_viewport(&device, backbuffer_info.extent.into());
+            command_recorder.set_scissor(&device, backbuffer_info.extent.into());
+
+            command_recorder.upload_push_constants(
+                &device,
+                render_manager.debug_pipeline.debug_pipeline().unwrap(),
+                &DebugPushConstants {
+                    camera: camera_buffer_id.pack(),
+                },
+            );
+
+            command_recorder.draw_indexed(&device, indices.len() as u32);
+
+            command_recorder.end_rendering(&device);
+        }
+
+        command_recorder.pipeline_barrier_image_transition(
+            &device,
+            ImageTransition {
+                image: backbuffer_index,
+                src_layout: ImageLayout::ColorAttachmentOptimal,
+                src_access: AccessFlags::SHADER_WRITE,
                 dst_layout: ImageLayout::TransferSrcOptimal,
                 dst_access: AccessFlags::TRANSFER_READ,
             },
         );
+
         command_recorder.pipeline_barrier_image_transition(
             &device,
             ImageTransition {
