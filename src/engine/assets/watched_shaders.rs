@@ -14,12 +14,12 @@ pub struct WatchedShaders {
     shaders_loaded: HashSet<String>,
 
     // The key is the dependency signal, the value is the list of shaders that it depends on.
-    dependency_signals: HashMap<DependencySignal, Vec<String>>,
-    dirty_dependency_signals: HashSet<DependencySignal>,
+    dependency_signals: HashMap<ShaderDependencySignal, Vec<String>>,
+    dirty_dependency_signals: HashSet<ShaderDependencySignal>,
 }
 
 #[derive(Hash, Eq, PartialEq, Clone)]
-pub struct DependencySignal(Uuid);
+pub struct ShaderDependencySignal(Uuid);
 
 impl WatchedShaders {
     pub fn new() -> Self {
@@ -31,8 +31,8 @@ impl WatchedShaders {
         }
     }
 
-    pub fn create_dependency_signal(&mut self) -> DependencySignal {
-        let dependency_signal = DependencySignal(Uuid::new_v4());
+    pub fn create_dependency_signal(&mut self) -> ShaderDependencySignal {
+        let dependency_signal = ShaderDependencySignal(Uuid::new_v4());
         self.dependency_signals
             .insert(dependency_signal.clone(), Vec::new());
         dependency_signal
@@ -43,7 +43,7 @@ impl WatchedShaders {
         assets: &mut Assets,
         file_path: impl ToString,
         name: impl ToString,
-        dependency_signal: &DependencySignal,
+        dependency_signal: &ShaderDependencySignal,
     ) {
         let watched_handle = assets.load::<Vec<u32>>(file_path).into_watched();
         self.shaders.insert(name.to_string(), watched_handle);
@@ -53,7 +53,7 @@ impl WatchedShaders {
             .push(name.to_string());
     }
 
-    pub fn is_dependency_signaled(&self, dependency_signal: &DependencySignal) -> bool {
+    pub fn is_dependency_signaled(&self, dependency_signal: &ShaderDependencySignal) -> bool {
         self.dirty_dependency_signals.contains(dependency_signal)
     }
 

@@ -1,198 +1,146 @@
-use serde::{Deserialize, Serialize};
+use super::{
+    vox_world::{CHUNK_LENGTH, CHUNK_OCTREE_HEIGHT},
+    VoxelData,
+};
 
-pub type MortonCode = u32;
+pub const ROOT_INDEX: u32 = 0;
+pub const NULL_INDEX: u32 = u32::MAX;
 
-#[derive(Clone, Debug)]
-pub struct VoxelData {
-    pub morton_code: MortonCode,
-    pub normal: [f32; 3],
+#[derive(Debug)]
+#[repr(C)]
+pub struct VoxelOctreeNode {
+    // First bit signifies if the node is "non-occupied" in terms of the octree array.
+    voxel_data: u32,
+    children_pointers: [u32; 8],
 }
 
-impl VoxelData {
+impl VoxelOctreeNode {
     pub fn empty() -> Self {
         Self {
-            morton_code: 0,
-            normal: [0.0; 3],
+            voxel_data: NULL_INDEX,
+            children_pointers: [NULL_INDEX; 8],
         }
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct VoxelMaterial {
-    pub normal: [f32; 3],
+#[derive(Debug)]
+pub struct VoxelOctree {
+    nodes: Vec<VoxelOctreeNode>,
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct SVONode {
-    pub data_index: usize,
-    pub children_base_index: usize,
-    pub children_offset: [u8; 8],
-}
-
-pub const SVO_NODE_NULL_OFFSET: u8 = u8::MAX;
-
-impl SVONode {
-    pub fn empty() -> Self {
-        Self {
-            data_index: 0,
-            children_base_index: 0,
-            children_offset: [SVO_NODE_NULL_OFFSET; 8],
+impl VoxelOctree {
+    pub fn new() -> Self {
+        VoxelOctree {
+            nodes: vec![VoxelOctreeNode::empty()],
         }
     }
 
-    pub fn has_data(&self) -> bool {
-        self.data_index != 0
+    pub fn add_voxel(&mut self, mut voxel_morton: u32, voxel_data: u32) {
+        let mut node_index = ROOT_INDEX;
+
+        for i in (0..CHUNK_OCTREE_HEIGHT).rev() {
+            let curr_node = &self.nodes[node_index as usize];
+
+            let child_morton = ((voxel_morton >> (3 * i)) & 0b111) as usize;
+            voxel_morton <<= 3;
+
+            let prev_node = node_index;
+            node_index = curr_node.children_pointers[child_morton];
+            if node_index == NULL_INDEX {
+                let new_index = self.nodes.len() as u32;
+                self.nodes.push(VoxelOctreeNode::empty());
+                self.nodes[prev_node as usize].children_pointers[child_morton] = new_index;
+                node_index = new_index;
+            }
+        }
+
+        self.nodes[node_index as usize].voxel_data = voxel_data;
     }
 
-    pub fn has_children(&self) -> bool {
-        self.children_base_index != 0
-    }
-
-    pub fn is_null(&self) -> bool {
-        !(self.has_data() || self.has_children())
-    }
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct VoxelSVO {
-    nodes: Vec<SVONode>,
-    material: Vec<VoxelMaterial>,
-}
-
-impl VoxelSVO {
-    pub fn nodes(&self) -> &[SVONode] {
+    pub fn nodes(&self) -> &Vec<VoxelOctreeNode> {
         &self.nodes
     }
-
-    pub fn materials(&self) -> &[VoxelMaterial] {
-        &self.material
-    }
 }
 
-pub struct VoxelSVOBuilder {
-    pub current_morton_code: MortonCode,
-    pub max_depth: u32,
-
-    pub buffers: Vec<Vec<SVONode>>,
-    pub svo_nodes: Vec<SVONode>,
-    pub svo_data: Vec<VoxelData>,
+#[derive(Debug)]
+#[repr(C)]
+pub struct ChunkOctreeNode {
+    chunk_data: u32,
+    children_pointers: [u32; 8],
 }
 
-impl VoxelSVOBuilder {
-    pub fn new(grid_length: usize) -> Self {
-        let max_depth = (grid_length as f32).log2().ceil() as u32;
-
-        let buffers = vec![vec![]; max_depth as usize + 1];
-
-        let nodes = vec![SVONode::empty()];
-        let data = vec![VoxelData::empty()];
-
+impl ChunkOctreeNode {
+    pub fn empty() -> Self {
         Self {
-            current_morton_code: 0,
-            max_depth,
-            buffers,
-            svo_nodes: nodes,
-            svo_data: data,
+            chunk_data: NULL_INDEX,
+            children_pointers: [NULL_INDEX; 8],
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct ChunkOctree {
+    nodes: Vec<ChunkOctreeNode>,
+    side_length: u32,
+}
+
+impl ChunkOctree {
+    pub fn new(side_length: u32) -> Self {
+        Self {
+            nodes: vec![ChunkOctreeNode::empty()],
+            side_length,
         }
     }
 
-    pub fn add_voxel(&mut self, data: VoxelData) {
-        // Fill in empty voxels
-        if data.morton_code > self.current_morton_code {
-            self.fill_empty_voxels((data.morton_code - self.current_morton_code) as usize);
-        }
-        self.current_morton_code = data.morton_code + 1;
+    pub fn create_chunk(&mut self, mut chunk_morton: u32, chunk_data: u32) {
+        let mut node_index = ROOT_INDEX;
 
-        // Add voxel data
-        self.svo_data.push(data);
+        for i in (0..self.height()).rev() {
+            let curr_node = &self.nodes[node_index as usize];
 
-        // Add voxel node to max depth buffer
-        let node = SVONode {
-            data_index: self.svo_data.len() - 1,
-            children_base_index: 0,
-            children_offset: [SVO_NODE_NULL_OFFSET; 8],
-        };
-        self.buffers[(self.max_depth) as usize].push(node);
+            let child_morton = ((chunk_morton >> (i * 3)) & 0b111) as usize;
+            chunk_morton <<= 3;
 
-        // Refine buffers
-        self.refine_buffers();
-    }
-
-    // Groups common voxels into higher level buffers, writes any remaining voxels to svo
-    fn refine_buffers(&mut self) {
-        for depth in (1..=self.max_depth).rev() {
-            let depth = depth as usize;
-            if self.buffers[depth as usize].len() == 8 {
-                let is_buffer_empty = self.buffers[depth as usize]
-                    .iter()
-                    .all(|node| node.is_null());
-
-                if is_buffer_empty {
-                    self.buffers[depth - 1].push(SVONode::empty());
-                } else {
-                    let node = self.group_buffer(depth);
-                    self.buffers[depth - 1].push(node);
-                }
-
-                self.buffers[depth as usize].clear();
-            } else {
-                break;
+            let prev_node = node_index;
+            node_index = curr_node.children_pointers[child_morton];
+            if node_index == NULL_INDEX {
+                let new_index = self.nodes.len() as u32;
+                self.nodes.push(ChunkOctreeNode::empty());
+                self.nodes[prev_node as usize].children_pointers[child_morton] = new_index;
+                node_index = new_index;
             }
         }
+
+        self.nodes[node_index as usize].chunk_data = chunk_data;
     }
 
-    fn group_buffer(&mut self, depth: usize) -> SVONode {
-        let mut parent = SVONode::empty();
+    pub fn get_chunk(&self, mut chunk_morton: u32) -> u32 {
+        let mut node_index = ROOT_INDEX;
 
-        let mut is_first = true;
-        for i in 0..8 {
-            if self.buffers[depth][i].is_null() {
-                continue;
+        for _ in 0..self.height() {
+            let curr_node = &self.nodes[node_index as usize];
+            let child_morton = (chunk_morton & 0b111) as usize;
+            chunk_morton >>= 3;
+
+            node_index = curr_node.children_pointers[child_morton];
+            if node_index == NULL_INDEX {
+                return NULL_INDEX;
             }
-
-            let node = self.buffers[depth][i].clone();
-
-            if is_first {
-                parent.children_base_index = self.svo_nodes.len();
-                is_first = false;
-            }
-            let offset = self.svo_nodes.len() - parent.children_base_index;
-            parent.children_offset[i] = offset as u8;
-
-            self.svo_nodes.push(node);
         }
 
-        parent
+        self.nodes[node_index as usize].chunk_data
     }
 
-    pub fn finalize_svo(mut self) -> VoxelSVO {
-        let final_mortan_code = 8u32.pow(self.max_depth);
-
-        // Fill in empty voxels
-        self.fill_empty_voxels((final_mortan_code - self.current_morton_code) as usize);
-
-        // Add root node
-        self.svo_nodes.push(self.buffers[0][0].clone());
-
-        VoxelSVO {
-            nodes: self.svo_nodes,
-            material: self
-                .svo_data
-                .into_iter()
-                .map(|x| VoxelMaterial { normal: x.normal })
-                .collect(),
-        }
+    pub fn side_length(&self) -> u32 {
+        self.side_length
     }
 
-    fn fill_empty_voxels(&mut self, mut size: usize) {
-        while size > 0 {
-            self.add_empty_voxel(self.max_depth);
-            size -= 1;
-        }
+    pub fn height(&self) -> u32 {
+        println!("height: {}", self.side_length.trailing_zeros());
+        self.side_length.trailing_zeros()
     }
 
-    fn add_empty_voxel(&mut self, depth: u32) {
-        self.buffers[depth as usize].push(SVONode::empty());
-        self.refine_buffers();
+    pub fn nodes(&self) -> &Vec<ChunkOctreeNode> {
+        &self.nodes
     }
 }

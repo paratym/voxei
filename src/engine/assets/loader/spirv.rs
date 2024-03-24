@@ -1,5 +1,3 @@
-use std::time::Duration;
-
 use paya::shader::{CompilationError, ShaderCompiler};
 
 use crate::engine::assets::asset::{AssetLoadError, AssetLoadErrorKind, AssetLoader};

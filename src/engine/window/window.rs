@@ -76,4 +76,16 @@ impl Window {
     pub fn height(&self) -> u32 {
         self.winit_window.inner_size().height
     }
+
+    pub fn is_maximized(&self) -> bool {
+        self.winit_window.is_maximized()
+    }
+
+    pub fn is_minimized(&self) -> bool {
+        self.winit_window.is_minimized().unwrap_or(false)
+    }
+
+    pub fn handle(&self) -> &winit::window::Window {
+        &self.winit_window
+    }
 }

@@ -1,13 +1,9 @@
-use std::time::Duration;
-
-use paya::{common::Extent2D, swapchain::Swapchain};
 use winit::event_loop::EventLoop;
 
 use crate::engine::{
     graphics::{device::DeviceResource, swapchain::SwapchainResource},
     input::Input,
     resource::ResourceBank,
-    window::window::Window,
 };
 use winit::event::{Event as WinitEvent, WindowEvent as WinitWindowEvent};
 

@@ -29,6 +29,29 @@ impl Input {
         input.mouse.clear_inputs();
     }
 
+    // General Input
+    pub fn horizontal_axis(&self) -> f32 {
+        let mut axis = 0.0;
+        if self.keyboard.is_key_down(keyboard::Key::A) {
+            axis -= 1.0;
+        }
+        if self.keyboard.is_key_down(keyboard::Key::D) {
+            axis += 1.0;
+        }
+        axis
+    }
+
+    pub fn vertical_axis(&self) -> f32 {
+        let mut axis = 0.0;
+        if self.keyboard.is_key_down(keyboard::Key::S) {
+            axis -= 1.0;
+        }
+        if self.keyboard.is_key_down(keyboard::Key::W) {
+            axis += 1.0;
+        }
+        axis
+    }
+
     // Keyboard functions
     pub fn is_key_pressed(&self, key: keyboard::Key) -> bool {
         self.keyboard.is_key_pressed(key)

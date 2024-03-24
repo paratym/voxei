@@ -8,5 +8,6 @@ pub mod model;
 pub mod physics;
 pub mod resource;
 pub mod system;
+pub mod ui;
 pub mod voxel;
 pub mod window;
