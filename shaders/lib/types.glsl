@@ -36,42 +36,12 @@ DECL_BUFFER(16) Camera {
   float fov;
 };
 
-const uint32_t NULL_NODE = ~0;
-const uint32_t NODE_TYPE_VOXEL = 0;
-const uint32_t NODE_TYPE_CHUNK = 1;
-
-struct VoxelOctreeNode {
-  uint32_t voxel_data;
-  uint32_t children[8];
+DECL_BUFFER(4) ChunkOccupancyGrid {
+  uint8_t grid[];
 };
 
-struct ChunkOctreeNode {
-  uint32_t chunk_data;
-  uint32_t children[8];
-};
-
-struct VoxelData {
-  vec3 color;
-};
-
-VoxelData voxel_data_empty() {
-  return VoxelData(vec3(0, 0, 0));
-}
-
-DECL_BUFFER(16) VoxelOctree {
-  VoxelOctreeNode nodes[];
-};
-
-DECL_BUFFER(4) ChunkOctree {
-  uint32_t side_length;
-  ChunkOctreeNode nodes[];
-};
-
-DECL_BUFFER(16) ChunkDataLUT {
-  // Pointers to VoxelOctree buffers.
-  ResourceId chunks[];
-};
-
-DECL_BUFFER(16) VoxelDataList {
-  VoxelData data[];
+DECL_BUFFER(16) VoxelWorldInfo {
+  i32vec3 chunk_center;
+  ResourceId chunk_occupancy_grid_buffer;
+  uint32_t chunk_render_distance;
 };

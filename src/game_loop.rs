@@ -25,9 +25,9 @@ pub fn game_loop(app: &mut App) {
     execute_system(app, Camera::update_cameras);
     execute_system(app, PipelineManager::update);
     execute_system(app, RenderManager::update);
+    execute_system(app, VoxelPipeline::update_resize_buffers);
     execute_system(app, RenderManager::render);
 
-    execute_system(app, VoxelWorld::clear_changes);
     execute_system(app, Input::clear_inputs);
 }
 

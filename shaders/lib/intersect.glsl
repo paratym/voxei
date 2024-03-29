@@ -12,17 +12,19 @@ RayAABBIntersection ray_aabb_intersection(Ray ray, AABB aabb) {
   float texit = min(traverse.x, traverse.y);
 
   bool hit = texit >= tenter;
-  return RayAABBIntersection(tmin, tmax, max(tenter, 0.0), texit, hit);
-}
-
-RayAABBIntersection ray_voxel_intersection(Ray ray, vec3 pos, float half_length) {
-  return ray_aabb_intersection(ray, AABB(pos - vec3(half_length), pos + vec3(half_length)));
+  return RayAABBIntersection(tmin, tmax, tenter, texit, hit);
 }
 
 bool aabb_aabb_intersection(AABB a, AABB b) {
   return (a.min.x <= b.max.x && a.max.x >= b.min.x) &&
          (a.min.y <= b.max.y && a.max.y >= b.min.y) &&
          (a.min.z <= b.max.z && a.max.z >= b.min.z);
+}
+
+bool point_aabb_intersection(vec3 point, AABB aabb) {
+  return (point.x >= aabb.min.x && point.x <= aabb.max.x) &&
+         (point.y >= aabb.min.y && point.y <= aabb.max.y) &&
+         (point.z >= aabb.min.z && point.z <= aabb.max.z);
 }
 
 struct Projection {

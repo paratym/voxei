@@ -25,12 +25,12 @@ use crate::{
 
 pub fn setup_resources(app: &mut crate::app::App) {
     // Engine Resources
-    app.resource_bank_mut().insert(Settings::default());
+    let settings = Settings::default();
     app.resource_bank_mut().insert(Input::new());
     app.resource_bank_mut().insert(Time::new());
 
     let mut ecs_world = ECSWorld::new();
-    let vox_world = VoxelWorld::new();
+    let vox_world = VoxelWorld::new(&settings);
 
     let mut assets = Assets::new();
     assets.add_loader::<SpirVLoader>();
@@ -54,11 +54,13 @@ pub fn setup_resources(app: &mut crate::app::App) {
         &mut watched_shaders,
         &mut pipeline_manager,
         &mut device_resource,
+        &vox_world,
     );
 
     // ECS World spawns
     spawn_player(&mut ecs_world, &mut device_resource);
 
+    app.resource_bank_mut().insert(settings);
     app.resource_bank_mut().insert(window);
     app.resource_bank_mut().insert(assets);
     app.resource_bank_mut().insert(ecs_world);
