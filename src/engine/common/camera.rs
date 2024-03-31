@@ -1,5 +1,6 @@
 use nalgebra::{Isometry3, Vector3};
 use paya::command_recorder::CommandRecorder;
+use paya::common::AccessFlags;
 use paya::device::Device;
 use paya::gpu_resources::BufferId;
 
@@ -86,6 +87,7 @@ impl Camera {
             device,
             command_recorder,
             self.buffer,
+            AccessFlags::SHADER_READ,
             |ptr: *mut CameraBuffer| {
                 let data = CameraBuffer {
                     transform_matrix: self.transform.as_slice().try_into().unwrap(),

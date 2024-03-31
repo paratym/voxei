@@ -74,6 +74,7 @@ pub fn stage_buffer_copy<T>(
     device: &mut Device,
     command_recorder: &mut CommandRecorder,
     dst_buffer_id: BufferId,
+    dst_buffer_access: AccessFlags,
     copy_fn: impl Fn(*mut T),
 ) {
     let dst_buffer = device.get_buffer(dst_buffer_id).info.clone();
@@ -103,7 +104,7 @@ pub fn stage_buffer_copy<T>(
         BufferTransition {
             buffer: dst_buffer_id,
             src_access: AccessFlags::TRANSFER_WRITE,
-            dst_access: AccessFlags::SHADER_READ,
+            dst_access: dst_buffer_access,
         },
     );
 }

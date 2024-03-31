@@ -83,11 +83,12 @@ impl RenderManager {
         };
         let backbuffer_info = device.get_image(backbuffer_index).info.clone();
 
-        let Some(voxel_ray_march_pipeline) =
-            pipeline_manager.get_compute_pipeline(voxel_pipeline.ray_march_pipeline())
-        else {
+        if pipeline_manager
+            .get_compute_pipeline(voxel_pipeline.ray_march_pipeline())
+            .is_none()
+        {
             return;
-        };
+        }
 
         let Some(primary_camera_buffer_id) = ecs_world
             .query::<&Camera>()
@@ -106,53 +107,24 @@ impl RenderManager {
             camera.record_copy_commands(&mut device, &mut command_recorder);
         }
 
-        command_recorder.pipeline_barrier_image_transition(
-            &device,
-            ImageTransition {
-                image: backbuffer_index,
-                src_layout: ImageLayout::Undefined,
-                src_access: AccessFlags::empty(),
-                dst_layout: ImageLayout::General,
-                dst_access: AccessFlags::SHADER_WRITE,
-            },
+        let cpu_frame_index = device.cpu_frame_index();
+        voxel_pipeline.record_ray_march_commands(
+            &mut device,
+            &mut command_recorder,
+            &pipeline_manager,
+            backbuffer_index,
+            backbuffer_info.extent.into(),
+            ImageLayout::Undefined,
+            AccessFlags::empty(),
+            primary_camera_buffer_id,
+            cpu_frame_index,
         );
-
-        // Ray march pass
-        {
-            command_recorder.bind_compute_pipeline(&device, voxel_ray_march_pipeline);
-            command_recorder.upload_push_constants(
-                &device,
-                voxel_ray_march_pipeline,
-                &RayMarchPushConstants::new(
-                    backbuffer_index,
-                    primary_camera_buffer_id,
-                    &voxel_pipeline,
-                ),
-            );
-            command_recorder.dispatch(
-                &device,
-                (backbuffer_info.extent.width as f32 / 16.0).ceil() as u32,
-                (backbuffer_info.extent.height as f32 / 16.0).ceil() as u32,
-                1,
-            );
-        }
 
         command_recorder.pipeline_barrier_image_transition(
             &device,
             ImageTransition {
                 image: backbuffer_index,
                 src_layout: ImageLayout::General,
-                src_access: AccessFlags::SHADER_WRITE,
-                dst_layout: ImageLayout::ColorAttachmentOptimal,
-                dst_access: AccessFlags::SHADER_WRITE,
-            },
-        );
-
-        command_recorder.pipeline_barrier_image_transition(
-            &device,
-            ImageTransition {
-                image: backbuffer_index,
-                src_layout: ImageLayout::ColorAttachmentOptimal,
                 src_access: AccessFlags::SHADER_WRITE,
                 dst_layout: ImageLayout::TransferSrcOptimal,
                 dst_access: AccessFlags::TRANSFER_READ,
