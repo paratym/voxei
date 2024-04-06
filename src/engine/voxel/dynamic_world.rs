@@ -62,8 +62,6 @@ impl DynVoxelWorld {
         } else {
             self.chunk_occupancy_mask
                 .set_status(morton, SpatialStatus::Loaded);
-            println!("loaded chunk at {:?}", chunk.chunk_position);
-            // TODO - upload brick data and figure out materials
             let local_brick_min = local_chunk_pos.to_dyn_brick_pos();
             let local_brick_min_morton = *local_brick_min.morton();
             for brick_morton in 0..CHUNK_VOLUME {
@@ -74,13 +72,8 @@ impl DynVoxelWorld {
                 if is_empty {
                     self.set_brick(dyn_brick_morton, None);
                 } else {
-                    println!(
-                        "loaded brick at {:?}",
-                        Morton::new(dyn_brick_morton).decode()
-                    );
                     let brick_data = BrickData::from_voxel_array(generated_voxels);
                     self.set_brick(dyn_brick_morton, Some(brick_data));
-                    println!("brick data len: {}", self.brick_data.data.len());
                 }
             }
         }
@@ -95,7 +88,6 @@ impl DynVoxelWorld {
     pub fn set_brick(&mut self, morton: u64, brick: Option<BrickData>) {
         let brick_index = if let Some(brick) = brick {
             let index = self.brick_data.insert(brick);
-            println!("inserted brick data at index: {}", index);
             BrickIndex::new_loaded(index)
         } else {
             BrickIndex::new_loaded_empty()

@@ -207,13 +207,17 @@ impl VoxelPipeline {
                 memory_location: MemoryLocation::CpuToGpu,
                 usage: BufferUsageFlags::TRANSFER_SRC,
             });
+            command_recorder.destroy_buffer_deferred(brick_indices_staging_buffer);
+            command_recorder.destroy_buffer_deferred(brick_data_staging_buffer);
+
             let brick_indices_staging_ptr =
                 device.map_buffer_typed::<BrickIndex>(brick_indices_staging_buffer);
-            let mut brick_data_staging_ptr =
+            let brick_data_staging_ptr =
                 device.map_buffer_typed::<BrickData>(brick_data_staging_buffer);
 
             let mut brick_indices_stage_index = 0;
             let mut brick_data_stage_index = 0;
+            let time = Instant::now();
             for brick_update in self.queued_brick_updates.drain(
                 (self.queued_brick_updates.len() as isize - brick_change_upload_size as isize)
                     .max(0) as usize..,
@@ -230,46 +234,48 @@ impl VoxelPipeline {
                     device,
                     brick_indices_staging_buffer,
                     brick_indices_stage_index as u64 * std::mem::size_of::<BrickIndex> as u64,
-                    self.brick_data_buffer,
+                    self.brick_indices_grid_buffer,
                     brick_morton as u64 * std::mem::size_of::<BrickIndex>() as u64,
                     std::mem::size_of::<BrickIndex>() as u64,
                 );
+                if brick_morton
+                    >= vox_world.dyn_world().brick_indices_grid().buffer_size() as u64 / 4
+                {
+                    // println!("Brick indices buffer on gpu is too small, can't add new bricks.");
+                }
                 brick_indices_stage_index += 1;
 
                 if brick_index.status() == SpatialStatus::Loaded {
                     // Set brick data element
                     let brick_index = brick_index.index();
-                    println!("Brick index: {}", brick_index);
                     if brick_index >= settings.brick_data_max_size {
-                        println!("Brick data buffer on gpu is too small, can't add new bricks.");
+                        // println!("Brick data buffer on gpu is too small, can't add new bricks.");
                         continue;
                     }
 
-                    let brick_data_offset_ptr =
-                        unsafe { brick_data_staging_ptr.add(brick_data_stage_index) };
-                    unsafe {
-                        brick_data_offset_ptr.copy_from(
-                            vox_world.dyn_world().brick_data().get(brick_index) as *const _,
-                            1,
-                        )
-                    };
-                    command_recorder.copy_buffer_to_buffer(
-                        device,
-                        brick_data_staging_buffer,
-                        brick_data_stage_index as u64 * std::mem::size_of::<BrickData>() as u64,
-                        self.brick_data_buffer,
-                        brick_index as u64 * std::mem::size_of::<BrickData>() as u64,
-                        std::mem::size_of::<BrickData>() as u64,
-                    );
+                    // let brick_data_offset_ptr =
+                    //     unsafe { brick_data_staging_ptr.add(brick_data_stage_index) };
+                    // unsafe {
+                    //     brick_data_offset_ptr.copy_from(
+                    //         vox_world.dyn_world().brick_data().get(brick_index) as *const _,
+                    //         1,
+                    //     )
+                    // };
+                    // command_recorder.copy_buffer_to_buffer(
+                    //     device,
+                    //     brick_data_staging_buffer,
+                    //     brick_data_stage_index as u64 * std::mem::size_of::<BrickData>() as u64,
+                    //     self.brick_data_buffer,
+                    //     brick_index as u64 * std::mem::size_of::<BrickData>() as u64,
+                    //     std::mem::size_of::<BrickData>() as u64,
+                    // );
 
                     brick_data_stage_index += 1;
                 }
             }
-            command_recorder.destroy_buffer_deferred(brick_indices_staging_buffer);
-            command_recorder.destroy_buffer_deferred(brick_data_staging_buffer);
+            println!("Time to upload bricks: {:?}", time.elapsed());
         }
 
-        let instant = Instant::now();
         // Reset request list ptr.
         stage_buffer_copy(
             device,
@@ -278,14 +284,6 @@ impl VoxelPipeline {
             AccessFlags::SHADER_READ | AccessFlags::SHADER_WRITE,
             |ptr: *mut u32| unsafe { ptr.write(0) },
         );
-
-        // Upload brick data changes.
-        let brick_upload_size = self
-            .queued_brick_updates
-            .len()
-            .min(settings.brick_load_max_size as usize) as u64;
-
-        if brick_upload_size > 0 {}
     }
 
     pub fn record_ray_march_commands(
