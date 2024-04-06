@@ -1,6 +1,10 @@
+use hecs::{Query, QueryBorrow, With};
 use voxei_macros::Resource;
 
-use crate::engine::system::SystemParam;
+use crate::{
+    engine::system::SystemParam,
+    game::player::player::{PlayerQuery, PlayerTag},
+};
 
 #[derive(Resource)]
 pub struct ECSWorld {
@@ -14,8 +18,14 @@ impl ECSWorld {
         }
     }
 
-    pub fn world(&mut self) -> &mut hecs::World {
+    pub fn world_mut(&mut self) -> &mut hecs::World {
         &mut self.world
+    }
+
+    pub fn player_query<'a, Q: Query>(&'a self) -> PlayerQuery<Q> {
+        PlayerQuery::new(
+            self.query::<Q>().with::<&'a PlayerTag>() as QueryBorrow<'a, With<Q, &'a PlayerTag>>
+        )
     }
 }
 

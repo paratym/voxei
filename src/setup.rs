@@ -54,6 +54,7 @@ pub fn setup_resources(app: &mut crate::app::App) {
         &mut watched_shaders,
         &mut pipeline_manager,
         &mut device_resource,
+        &settings,
         &vox_world,
     );
 

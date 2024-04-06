@@ -37,7 +37,7 @@ DECL_BUFFER(16) Camera {
 };
 
 DECL_BUFFER(4) ChunkOccupancyGrid {
-  uint8_t grid[];
+  uint16_t grid[];
 };
 
 DECL_BUFFER_COHERENT(4) BrickIndicesGrid {
@@ -45,17 +45,17 @@ DECL_BUFFER_COHERENT(4) BrickIndicesGrid {
   uint32_t grid[];
 };
 
-struct Brick {
-  uint8_t voxel_mask[BRICK_AREA];
+struct BrickData {
   uint32_t index;
+  uint8_t voxel_mask[BRICK_AREA];
 };
 
-DECL_BUFFER(4) BrickData {
-  Brick data[];
+DECL_BUFFER(4) BrickDataList {
+  BrickData data[];
 };
 
 struct BrickRequest {
-  uint32_t morton;
+  uint64_t morton;
 };
 
 DECL_BUFFER_COHERENT(4) BrickRequestList {
@@ -69,5 +69,7 @@ DECL_BUFFER(16) VoxelWorldInfo {
   ResourceId brick_indices_grid_buffer;
   ResourceId brick_data_buffer;
   ResourceId brick_request_list_buffer;
-  uint32_t chunk_render_distance;
+
+  uint32_t chunk_side_length;
+  float voxel_unit_length;
 };

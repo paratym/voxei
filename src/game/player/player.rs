@@ -1,4 +1,5 @@
 pub struct PlayerTag;
+use hecs::{Entity, Query, QueryBorrow, With};
 use nalgebra::{Quaternion, UnitQuaternion, Vector3};
 use paya::device::Device;
 
@@ -18,7 +19,20 @@ struct PlayerController {
     euler_angles: Vector3<f32>,
 
     walk_speed: f32,
+    run_speed: f32,
     paused: bool,
+}
+
+pub struct PlayerQuery<'a, Q: Query>(QueryBorrow<'a, With<Q, &'a PlayerTag>>);
+
+impl<'a, Q: Query> PlayerQuery<'a, Q> {
+    pub fn new(query: QueryBorrow<'a, With<Q, &'a PlayerTag>>) -> Self {
+        Self(query)
+    }
+
+    pub fn player<'b>(&'b mut self) -> (Entity, Q::Item<'b>) {
+        self.0.iter().next().expect("Player was not spawned.")
+    }
 }
 
 pub fn spawn_player(world: &mut ECSWorld, device: &mut Device) {
@@ -29,6 +43,7 @@ pub fn spawn_player(world: &mut ECSWorld, device: &mut Device) {
         PlayerController {
             euler_angles: Vector3::new(0.0, 0.0, 0.0),
             walk_speed: 5.0,
+            run_speed: 50.0,
             paused: true,
         },
     ));
@@ -41,10 +56,8 @@ pub fn update_player_controller(
     settings: Res<Settings>,
     mut window: ResMut<Window>,
 ) {
-    let mut query = ecs_world
-        .query::<(&mut Transform, &mut PlayerController)>()
-        .with::<&PlayerTag>();
-    let (_, (transform, controller)) = query.iter().next().expect("Player was not spawned.");
+    let mut query = ecs_world.player_query::<(&mut Transform, &mut PlayerController)>();
+    let (_, (transform, controller)) = query.player();
 
     if input.is_key_pressed(Key::Tab) {
         controller.paused = !controller.paused;
@@ -75,16 +88,20 @@ pub fn update_player_controller(
         delta.y = -1.0;
     }
 
+    let mut speed = controller.walk_speed;
+    if input.is_key_down(Key::LControl) {
+        speed = controller.run_speed;
+    }
+
     let mut translation = Vector3::new(0.0, 0.0, 0.0);
     if delta.x != 0.0 || delta.z != 0.0 {
-        let xz_delta = transform.isometry.rotation
-            * Vector3::new(delta.x, 0.0, delta.z).normalize()
-            * controller.walk_speed;
+        let xz_delta =
+            transform.isometry.rotation * Vector3::new(delta.x, 0.0, delta.z).normalize() * speed;
 
         translation.x = xz_delta.x;
         translation.z = xz_delta.z;
     }
-    translation.y += delta.y * controller.walk_speed;
+    translation.y += delta.y * speed;
 
     transform.isometry.translation.vector += translation * time.delta_time().as_secs_f32();
 }

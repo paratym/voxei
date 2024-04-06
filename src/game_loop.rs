@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::{
     app::App,
     engine::{
@@ -15,6 +17,7 @@ use crate::{
 };
 
 pub fn game_loop(app: &mut App) {
+    let time = Instant::now();
     execute_system(app, Time::update);
 
     execute_system(app, Assets::update);
@@ -24,15 +27,15 @@ pub fn game_loop(app: &mut App) {
     execute_system(app, update_player_controller);
 
     // Update voxel world
-    execute_system(app, VoxelWorld::load_requested_bricks);
+    execute_system(app, VoxelWorld::update_world_streaming);
 
-    // Update GPU resources
+    // Update GPU non-buffer resources
     execute_system(app, PipelineManager::update);
     execute_system(app, RenderManager::update);
 
-    // Update GPU Buffers
+    // Update render resources
     execute_system(app, Camera::update_cameras);
-    execute_system(app, VoxelPipeline::update_resize_buffers);
+    execute_system(app, VoxelPipeline::update_world_changes);
 
     // Render
     execute_system(app, RenderManager::render);

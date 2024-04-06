@@ -1,10 +1,10 @@
 use std::ops::{Deref, DerefMut};
 
 use paya::{
-    allocator::MemoryFlags,
+    allocator::{MemoryFlags, MemoryLocation},
     command_recorder::{self, CommandRecorder},
     common::{AccessFlags, BufferTransition, BufferUsageFlags},
-    device::{Device, DeviceType, TypedMappedPtr},
+    device::{Device, DeviceType},
     gpu_resources::{BufferId, BufferInfo},
     instance::{Instance, InstanceCreateInfo},
 };
@@ -61,7 +61,7 @@ pub fn create_device_buffer(device: &mut Device, name: impl Into<String>, size: 
     device.create_buffer(BufferInfo {
         name: name.into(),
         size,
-        memory_flags: MemoryFlags::DEVICE_LOCAL,
+        memory_location: MemoryLocation::GpuOnly,
         usage: BufferUsageFlags::STORAGE | BufferUsageFlags::TRANSFER_DST,
     })
 }
@@ -75,18 +75,18 @@ pub fn stage_buffer_copy<T>(
     command_recorder: &mut CommandRecorder,
     dst_buffer_id: BufferId,
     dst_buffer_access: AccessFlags,
-    copy_fn: impl Fn(*mut T),
+    copy_fn: impl FnOnce(*mut T),
 ) {
     let dst_buffer = device.get_buffer(dst_buffer_id).info.clone();
     let staging_buffer = device.create_buffer(BufferInfo {
         name: format!("{}_staging_buffer", dst_buffer.name).to_owned(),
         size: dst_buffer.size,
-        memory_flags: MemoryFlags::HOST_VISIBLE | MemoryFlags::HOST_COHERENT,
+        memory_location: MemoryLocation::CpuToGpu,
         usage: BufferUsageFlags::TRANSFER_SRC,
     });
 
-    let ptr = device.map_buffer_typed::<T>(staging_buffer);
-    copy_fn(*ptr);
+    let mut ptr = device.map_buffer_typed::<T>(staging_buffer);
+    copy_fn(ptr);
 
     command_recorder.copy_buffer_to_buffer(
         device,

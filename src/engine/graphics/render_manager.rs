@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use paya::{
     common::{
         AccessFlags, Extent2D, Extent3D, Format, ImageLayout, ImageTransition, ImageUsageFlags,
@@ -16,6 +18,7 @@ use crate::{
         voxel::vox_world::VoxelWorld,
     },
     game::player::player::PlayerTag,
+    settings::Settings,
 };
 
 use super::{
@@ -67,12 +70,13 @@ impl RenderManager {
     pub fn render(
         render_manager: ResMut<RenderManager>,
         mut voxel_pipeline: ResMut<VoxelPipeline>,
-        vox_world: Res<VoxelWorld>,
+        mut vox_world: ResMut<VoxelWorld>,
         pipeline_manager: Res<PipelineManager>,
         mut device: ResMut<DeviceResource>,
         mut swapchain: ResMut<SwapchainResource>,
         ecs_world: Res<ECSWorld>,
         time: Res<Time>,
+        settings: Res<Settings>,
     ) {
         let Some(image_index) = swapchain.acquire_next_image() else {
             return;
@@ -102,7 +106,14 @@ impl RenderManager {
 
         let mut command_recorder = device.create_command_recorder();
 
-        voxel_pipeline.record_copy_commands(&vox_world, &mut device, &mut command_recorder);
+        let copy_time = Instant::now();
+        voxel_pipeline.record_copy_commands(
+            &mut vox_world,
+            &mut device,
+            &mut command_recorder,
+            &settings,
+        );
+        let copy_time = Instant::now();
         for (_, camera) in ecs_world.query::<&Camera>().iter() {
             camera.record_copy_commands(&mut device, &mut command_recorder);
         }
