@@ -45,7 +45,7 @@ impl Default for Settings {
     fn default() -> Self {
         Self {
             camera_fov: consts::FRAC_PI_2,
-            mouse_sensitivity: 0.5,
+            mouse_sensitivity: 0.25,
 
             chunk_render_distance: ChunkRadius::new(7),
             chunk_dyn_loaded_distance: ChunkRadius::new(2),

@@ -6,6 +6,7 @@ use std::{
         Arc, Mutex,
     },
     thread::{spawn, JoinHandle},
+    time::Duration,
 };
 
 use nalgebra::Vector3;
@@ -36,9 +37,8 @@ impl GeneratedChunk {
 
 pub struct ChunkGenerator {
     chunk_thread: Option<JoinHandle<()>>,
-    chunk_req_send: Sender<WorldChunkPos>,
+    chunk_req_send: Option<Sender<WorldChunkPos>>,
     chunk_gen_recv: Mutex<Receiver<GeneratedChunk>>,
-    chunk_thread_running: Arc<AtomicBool>,
 
     currently_generating_chunks: HashSet<WorldChunkPos>,
 }
@@ -47,14 +47,11 @@ impl ChunkGenerator {
     pub fn new() -> Self {
         let (chunk_req_send, chunk_req_recv) = channel();
         let (chunk_gen_send, chunk_gen_recv) = channel();
-        let chunk_thread_running = Arc::new(AtomicBool::new(true));
-        let ctr = chunk_thread_running.clone();
-        let chunk_thread = spawn(|| Self::thread_fn(chunk_req_recv, chunk_gen_send, ctr));
+        let chunk_thread = spawn(|| Self::thread_fn(chunk_req_recv, chunk_gen_send));
         Self {
             chunk_thread: Some(chunk_thread),
-            chunk_req_send,
+            chunk_req_send: Some(chunk_req_send),
             chunk_gen_recv: Mutex::new(chunk_gen_recv),
-            chunk_thread_running,
             currently_generating_chunks: HashSet::new(),
         }
     }
@@ -64,12 +61,16 @@ impl ChunkGenerator {
             return;
         }
 
-        self.chunk_req_send.send(chunk_pos).unwrap();
+        self.chunk_req_send
+            .as_ref()
+            .unwrap()
+            .send(chunk_pos)
+            .unwrap();
         self.currently_generating_chunks.insert(chunk_pos);
     }
 
     pub fn collect_generated_chunks(&mut self) -> Vec<GeneratedChunk> {
-        let reciever = self.chunk_gen_recv.lock().unwrap();
+        let reciever = self.chunk_gen_recv.get_mut().unwrap();
 
         let mut chunks = Vec::new();
         while let Ok(chunk) = reciever.try_recv() {
@@ -80,16 +81,8 @@ impl ChunkGenerator {
         chunks
     }
 
-    fn thread_fn(
-        chunk_req_recv: Receiver<WorldChunkPos>,
-        chunk_gen_send: Sender<GeneratedChunk>,
-        running: Arc<AtomicBool>,
-    ) {
-        while running.load(Ordering::SeqCst) {
-            let Ok(chunk_pos) = chunk_req_recv.recv() else {
-                return;
-            };
-
+    fn thread_fn(chunk_req_recv: Receiver<WorldChunkPos>, chunk_gen_send: Sender<GeneratedChunk>) {
+        while let Ok(chunk_pos) = chunk_req_recv.recv() {
             let chunk_voxel_min = chunk_pos.vector * CHUNK_VOXEL_LENGTH as i32;
 
             let mut data = vec![None; CHUNK_VOLUME * BRICK_VOLUME];
@@ -125,7 +118,11 @@ impl ChunkGenerator {
 
 impl Drop for ChunkGenerator {
     fn drop(&mut self) {
-        self.chunk_thread_running.store(false, Ordering::SeqCst);
+        drop(
+            self.chunk_req_send
+                .take()
+                .expect("Failed to take chunk request sender."),
+        );
         self.chunk_thread
             .take()
             .unwrap()

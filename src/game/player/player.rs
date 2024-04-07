@@ -1,6 +1,6 @@
 pub struct PlayerTag;
 use hecs::{Entity, Query, QueryBorrow, With};
-use nalgebra::{Quaternion, UnitQuaternion, Vector3};
+use nalgebra::{Quaternion, Unit, UnitQuaternion, Vector3};
 use paya::device::Device;
 
 use crate::{
@@ -9,13 +9,14 @@ use crate::{
         ecs::ecs_world::ECSWorld,
         input::{keyboard::Key, Input},
         resource::{Res, ResMut},
+        voxel::util::Morton,
         window::window::Window,
     },
     settings::Settings,
 };
 
 struct PlayerController {
-    // In terms of radians
+    // In terms of degrees
     euler_angles: Vector3<f32>,
 
     walk_speed: f32,
@@ -68,14 +69,14 @@ pub fn update_player_controller(
 
     let mouse_delta = input.mouse_delta();
     if (mouse_delta.0 != 0.0 || mouse_delta.1 != 0.0) && !controller.paused {
-        controller.euler_angles.y +=
-            (mouse_delta.0 as f32 * settings.mouse_sensitivity).to_radians();
-        controller.euler_angles.x +=
-            (mouse_delta.1 as f32 * settings.mouse_sensitivity).to_radians();
+        controller.euler_angles.y += mouse_delta.0 as f32 * settings.mouse_sensitivity;
+        controller.euler_angles.x = (controller.euler_angles.x
+            + mouse_delta.1 as f32 * settings.mouse_sensitivity)
+            .clamp(-89.95, 89.95);
 
         transform.isometry.rotation = UnitQuaternion::from_euler_angles(
-            controller.euler_angles.x,
-            controller.euler_angles.y,
+            controller.euler_angles.x.to_radians(),
+            controller.euler_angles.y.to_radians(),
             0.0,
         );
     }
@@ -96,7 +97,10 @@ pub fn update_player_controller(
     let mut translation = Vector3::new(0.0, 0.0, 0.0);
     if delta.x != 0.0 || delta.z != 0.0 {
         let xz_delta =
-            transform.isometry.rotation * Vector3::new(delta.x, 0.0, delta.z).normalize() * speed;
+            (UnitQuaternion::from_euler_angles(0.0, controller.euler_angles.y.to_radians(), 0.0)
+                * Vector3::new(delta.x, 0.0, delta.z))
+            .normalize()
+                * speed;
 
         translation.x = xz_delta.x;
         translation.z = xz_delta.z;

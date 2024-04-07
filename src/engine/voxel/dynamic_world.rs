@@ -59,6 +59,7 @@ impl DynVoxelWorld {
         if chunk.is_empty {
             self.chunk_occupancy_mask
                 .set_status(morton, SpatialStatus::LoadedEmpty);
+            println!("Chunk at {:?} is empty.", local_chunk_pos);
         } else {
             self.chunk_occupancy_mask
                 .set_status(morton, SpatialStatus::Loaded);

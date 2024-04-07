@@ -6,7 +6,7 @@ use std::{
 use nalgebra::Vector3;
 use paya::{
     allocator::{MemoryFlags, MemoryLocation},
-    command_recorder::{self, CommandRecorder},
+    command_recorder::{self, CommandRecorder, CopyRegion},
     common::{
         AccessFlags, BufferTransition, BufferUsageFlags, Extent2D, ImageLayout, ImageTransition,
     },
@@ -51,7 +51,7 @@ struct WorldInfo {
     brick_request_list_buffer: PackedGpuResourceId,
 
     dyn_chunk_side_length: u32,
-    voxel_unit_length: f32,
+    dyn_chunk_half_length: u32,
 }
 
 #[repr(C)]
@@ -173,7 +173,10 @@ impl VoxelPipeline {
                         .dyn_world()
                         .chunk_render_distance()
                         .pow2_side_length(),
-                    voxel_unit_length: settings.voxel_unit_length,
+                    dyn_chunk_half_length: vox_world
+                        .dyn_world()
+                        .chunk_render_distance()
+                        .pow2_half_side_length(),
                 })
             },
         );
@@ -215,8 +218,8 @@ impl VoxelPipeline {
             let brick_data_staging_ptr =
                 device.map_buffer_typed::<BrickData>(brick_data_staging_buffer);
 
-            let mut brick_indices_stage_index = 0;
-            let mut brick_data_stage_index = 0;
+            let mut brick_indices_copies = Vec::new();
+            let mut brick_data_copies = Vec::new();
             let time = Instant::now();
             for brick_update in self.queued_brick_updates.drain(
                 (self.queued_brick_updates.len() as isize - brick_change_upload_size as isize)
@@ -227,23 +230,21 @@ impl VoxelPipeline {
                     vox_world.dyn_world().brick_indices_grid().as_slice()[brick_morton as usize];
 
                 // Set brick indices element
+                let brick_indices_stage_index = brick_indices_copies.len();
                 let indices_offset_ptr =
                     unsafe { brick_indices_staging_ptr.add(brick_indices_stage_index) };
                 unsafe { indices_offset_ptr.write(brick_index) };
-                command_recorder.copy_buffer_to_buffer(
-                    device,
-                    brick_indices_staging_buffer,
-                    brick_indices_stage_index as u64 * std::mem::size_of::<BrickIndex> as u64,
-                    self.brick_indices_grid_buffer,
-                    brick_morton as u64 * std::mem::size_of::<BrickIndex>() as u64,
-                    std::mem::size_of::<BrickIndex>() as u64,
-                );
+                brick_indices_copies.push(CopyRegion {
+                    src_offset: brick_indices_stage_index as u64
+                        * std::mem::size_of::<BrickIndex>() as u64,
+                    dst_offset: brick_morton * std::mem::size_of::<BrickIndex>() as u64,
+                    size: std::mem::size_of::<BrickIndex>() as u64,
+                });
                 if brick_morton
                     >= vox_world.dyn_world().brick_indices_grid().buffer_size() as u64 / 4
                 {
                     // println!("Brick indices buffer on gpu is too small, can't add new bricks.");
                 }
-                brick_indices_stage_index += 1;
 
                 if brick_index.status() == SpatialStatus::Loaded {
                     // Set brick data element
@@ -253,25 +254,38 @@ impl VoxelPipeline {
                         continue;
                     }
 
-                    // let brick_data_offset_ptr =
-                    //     unsafe { brick_data_staging_ptr.add(brick_data_stage_index) };
-                    // unsafe {
-                    //     brick_data_offset_ptr.copy_from(
-                    //         vox_world.dyn_world().brick_data().get(brick_index) as *const _,
-                    //         1,
-                    //     )
-                    // };
-                    // command_recorder.copy_buffer_to_buffer(
-                    //     device,
-                    //     brick_data_staging_buffer,
-                    //     brick_data_stage_index as u64 * std::mem::size_of::<BrickData>() as u64,
-                    //     self.brick_data_buffer,
-                    //     brick_index as u64 * std::mem::size_of::<BrickData>() as u64,
-                    //     std::mem::size_of::<BrickData>() as u64,
-                    // );
-
-                    brick_data_stage_index += 1;
+                    let brick_data_stage_index = brick_data_copies.len();
+                    let brick_data_offset_ptr =
+                        unsafe { brick_data_staging_ptr.add(brick_data_stage_index) };
+                    unsafe {
+                        brick_data_offset_ptr.copy_from(
+                            vox_world.dyn_world().brick_data().get(brick_index) as *const _,
+                            1,
+                        )
+                    };
+                    brick_data_copies.push(CopyRegion {
+                        src_offset: brick_data_stage_index as u64
+                            * std::mem::size_of::<BrickData>() as u64,
+                        dst_offset: brick_index as u64 * std::mem::size_of::<BrickData>() as u64,
+                        size: std::mem::size_of::<BrickData>() as u64,
+                    });
                 }
+            }
+
+            println!("Time to copy bricks: {:?}", time.elapsed());
+            command_recorder.copy_buffer_to_buffer_multiple(
+                device,
+                brick_indices_staging_buffer,
+                self.brick_indices_grid_buffer,
+                brick_indices_copies,
+            );
+            if brick_data_copies.len() > 0 {
+                command_recorder.copy_buffer_to_buffer_multiple(
+                    device,
+                    brick_data_staging_buffer,
+                    self.brick_data_buffer,
+                    brick_data_copies,
+                );
             }
             println!("Time to upload bricks: {:?}", time.elapsed());
         }
@@ -361,7 +375,7 @@ impl VoxelPipeline {
     ) {
         let buffer = self.brick_request_staging_buffers
             [cpu_frame_index as usize % constants::MAX_FRAMES_IN_FLIGHT];
-        let mut buffer_ptr = device.map_buffer_typed::<u32>(buffer);
+        let buffer_ptr = device.map_buffer_typed::<u32>(buffer);
 
         let size = unsafe { buffer_ptr.read() };
         assert!(size <= settings.brick_request_max_size);

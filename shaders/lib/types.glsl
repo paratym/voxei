@@ -71,5 +71,5 @@ DECL_BUFFER(16) VoxelWorldInfo {
   ResourceId brick_request_list_buffer;
 
   uint32_t chunk_side_length;
-  float voxel_unit_length;
+  uint32_t chunk_half_length;
 };

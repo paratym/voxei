@@ -1,9 +1,12 @@
-const float VOXEL_UNIT_LENGTH = 2.0;
+const float VOXEL_WORLD_LENGTH = 1.0/8.0;
 
-const float BRICK_LENGTH = 8;
-const uint32_t BRICK_AREA = 64;
-const float BRICK_DEPTH = 3;
-const float CHUNK_LENGTH = 8;
-const float CHUNK_DEPTH = 3;
+const uint32_t BRICK_LENGTH = 8;
+const uint32_t BRICK_AREA = BRICK_LENGTH * BRICK_LENGTH;
+const uint32_t BRICK_VOLUME = BRICK_AREA * BRICK_LENGTH;
+const uint32_t BRICK_MORTON_LENGTH = 9;
 
-const uint32_t MAX_BRICK_REQUESTS = 1024;
+const uint32_t CHUNK_LENGTH = 8;
+const uint32_t CHUNK_AREA = CHUNK_LENGTH * CHUNK_LENGTH;
+const uint32_t CHUNK_VOLUME = CHUNK_AREA * CHUNK_LENGTH;
+const uint32_t CHUNK_VOXEL_LENGTH = CHUNK_LENGTH * BRICK_LENGTH;
+const float CHUNK_WORLD_LENGTH = CHUNK_VOXEL_LENGTH * VOXEL_WORLD_LENGTH;
