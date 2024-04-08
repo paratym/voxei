@@ -48,11 +48,11 @@ impl Default for Settings {
             mouse_sensitivity: 0.25,
 
             chunk_render_distance: ChunkRadius::new(7),
-            chunk_dyn_loaded_distance: ChunkRadius::new(2),
+            chunk_dyn_loaded_distance: ChunkRadius::new(5),
             chunk_loaded_distance: ChunkRadius::new(10),
             chunk_generation_distance: ChunkRadius::new(3),
 
-            brick_data_max_size: 500,
+            brick_data_max_size: 20000,
             brick_request_max_size: 64,
             brick_load_max_size: 512,
 

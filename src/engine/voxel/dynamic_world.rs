@@ -264,6 +264,7 @@ impl BrickDataList {
     }
 }
 
+#[repr(C)]
 pub struct BrickData {
     // last bit determines if this is a free brick data, then the index points to the next free
     // brick.
@@ -292,7 +293,7 @@ impl BrickData {
         for i in 0..BRICK_VOLUME {
             let voxel = &voxel_data[i];
             if voxel.is_some() {
-                voxel_mask[i >> 3] = 1 << (i & 0b111);
+                voxel_mask[i >> 3] |= 1 << (i & 0b111);
             }
         }
 
