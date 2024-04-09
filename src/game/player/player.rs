@@ -43,8 +43,8 @@ pub fn spawn_player(world: &mut ECSWorld, device: &mut Device) {
         Transform::new(),
         PlayerController {
             euler_angles: Vector3::new(0.0, 0.0, 0.0),
-            walk_speed: 5.0,
-            run_speed: 50.0,
+            walk_speed: 30.0,
+            run_speed: 200.0,
             paused: true,
         },
     ));
@@ -54,7 +54,7 @@ pub fn update_player_controller(
     ecs_world: Res<ECSWorld>,
     input: Res<Input>,
     time: Res<Time>,
-    settings: Res<Settings>,
+    mut settings: ResMut<Settings>,
     mut window: ResMut<Window>,
 ) {
     let mut query = ecs_world.player_query::<(&mut Transform, &mut PlayerController)>();
@@ -65,6 +65,12 @@ pub fn update_player_controller(
 
         window.set_cursor_grabbed(!controller.paused);
         window.set_cursor_visible(controller.paused);
+    }
+
+    if input.is_key_down(Key::C) {
+        settings.camera_fov = 10.0f32.to_radians();
+    } else {
+        settings.camera_fov = 90.0f32.to_radians();
     }
 
     let mouse_delta = input.mouse_delta();

@@ -27,6 +27,7 @@ pub fn game_loop(app: &mut App) {
     execute_system(app, update_player_controller);
 
     // Update voxel world
+    execute_system(app, VoxelWorld::update_world_position);
     execute_system(app, VoxelWorld::update_world_streaming);
 
     // Update GPU non-buffer resources

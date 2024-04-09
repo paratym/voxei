@@ -21,8 +21,12 @@ impl Keyboard {
     pub fn submit_input(&mut self, input: SubmitInput) {
         match input {
             SubmitInput::Pressed(key) => {
-                self.pressed_keys.insert(key);
-                self.down_keys.insert(key);
+                if !self.down_keys.contains(&key) {
+                    self.pressed_keys.insert(key);
+                    self.down_keys.insert(key);
+                } else {
+                    self.repeated_keys.insert(key);
+                }
             }
             SubmitInput::Released(key) => {
                 self.released_keys.insert(key);
@@ -82,13 +86,14 @@ impl Keyboard {
     }
 }
 
+#[derive(Debug)]
 pub enum SubmitInput {
     Pressed(Key),
     Repeated(Key),
     Released(Key),
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Clone, Copy, PartialEq, Eq, Hash, Debug)]
 pub enum Key {
     A,
     B,

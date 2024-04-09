@@ -20,6 +20,9 @@ pub struct DynVoxelWorld {
     brick_changes: Vec<BrickChange>,
 
     chunk_render_distance: ChunkRadius,
+
+    /// The logical local translation we perform so memory can stay in place as we change origins.
+    chunk_translation: Vector3<i32>,
 }
 
 impl DynVoxelWorld {
@@ -40,7 +43,69 @@ impl DynVoxelWorld {
             brick_changes: Vec::new(),
 
             chunk_render_distance: settings.chunk_render_distance,
+            chunk_translation: Vector3::zeros(),
         }
+    }
+
+    pub fn update_translation(
+        &mut self,
+        chunk_translation: Vector3<i32>,
+        old_chunk_center: WorldChunkPos,
+    ) {
+        let slm = self.chunk_render_distance.pow2_side_length() as i32;
+        let new_chunk_center = old_chunk_center.vector + chunk_translation;
+        let dyn_translation = Vector3::new(
+            new_chunk_center.x.rem_euclid(slm),
+            new_chunk_center.y.rem_euclid(slm),
+            new_chunk_center.z.rem_euclid(slm),
+        );
+        let old_dyn_translation = self.chunk_translation;
+        self.chunk_translation = dyn_translation;
+
+        // Calculates on each axis the range of values on that axis need to be unloaded, the reference, my whiteboard
+        let unloaded =
+            chunk_translation.zip_zip_map(&dyn_translation, &old_dyn_translation, |t, new, old| {
+                if t.is_positive() {
+                    (new - t)..new
+                } else {
+                    (old + t)..old
+                }
+            });
+
+        for x in unloaded.x.to_owned() {
+            let x = x.rem_euclid(slm) as u32;
+            for y in 0..(slm as u32) {
+                for z in 0..(slm as u32) {
+                    self.unload_chunk(DynChunkPos::new(x, y, z));
+                }
+            }
+        }
+
+        for y in unloaded.y.to_owned() {
+            let y = y.rem_euclid(slm) as u32;
+            for x in 0..(slm as u32) {
+                for z in 0..(slm as u32) {
+                    self.unload_chunk(DynChunkPos::new(x, y, z));
+                }
+            }
+        }
+
+        for z in unloaded.z.to_owned() {
+            let z = z.rem_euclid(slm) as u32;
+            for x in 0..(slm as u32) {
+                for y in 0..(slm as u32) {
+                    self.unload_chunk(DynChunkPos::new(x, y, z));
+                }
+            }
+        }
+
+        println!("Unloaded chunks: {:?}", unloaded);
+    }
+
+    fn unload_chunk(&mut self, local_chunk_pos: DynChunkPos) {
+        let morton = local_chunk_pos.morton();
+        self.chunk_occupancy_mask
+            .set_status(morton, SpatialStatus::Unloaded);
     }
 
     pub fn chunk_status(&self, local_chunk_pos: DynChunkPos) -> SpatialStatus {
@@ -59,7 +124,6 @@ impl DynVoxelWorld {
         if chunk.is_empty {
             self.chunk_occupancy_mask
                 .set_status(morton, SpatialStatus::LoadedEmpty);
-            println!("Chunk at {:?} is empty.", local_chunk_pos);
         } else {
             self.chunk_occupancy_mask
                 .set_status(morton, SpatialStatus::Loaded);
@@ -113,6 +177,10 @@ impl DynVoxelWorld {
 
     pub fn chunk_render_distance(&self) -> ChunkRadius {
         self.chunk_render_distance
+    }
+
+    pub fn chunk_translation(&self) -> Vector3<u32> {
+        self.chunk_translation.map(|x| x as u32)
     }
 
     pub fn brick_data(&self) -> &BrickDataList {

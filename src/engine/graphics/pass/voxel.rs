@@ -45,6 +45,9 @@ const RAY_MARCH_PATH: &str = "shaders/ray_march.comp.glsl";
 #[repr(C)]
 struct WorldInfo {
     chunk_center: Vector3<i32>,
+    _padding0: u32,
+    dyn_chunk_translation: Vector3<u32>,
+
     chunk_occupancy_mask_buffer: PackedGpuResourceId,
     brick_indices_grid_buffer: PackedGpuResourceId,
     brick_data_buffer: PackedGpuResourceId,
@@ -177,6 +180,9 @@ impl VoxelPipeline {
                         .dyn_world()
                         .chunk_render_distance()
                         .pow2_half_side_length(),
+                    dyn_chunk_translation: vox_world.dyn_world().chunk_translation(),
+
+                    _padding0: 0,
                 })
             },
         );
@@ -272,7 +278,7 @@ impl VoxelPipeline {
                 }
             }
 
-            println!("Time to copy bricks: {:?}", time.elapsed());
+            // println!("Time to copy bricks: {:?}", time.elapsed());
             command_recorder.copy_buffer_to_buffer_multiple(
                 device,
                 brick_indices_staging_buffer,
@@ -287,7 +293,7 @@ impl VoxelPipeline {
                     brick_data_copies,
                 );
             }
-            println!("Time to upload bricks: {:?}", time.elapsed());
+            // println!("Time to upload bricks: {:?}", time.elapsed());
         }
 
         // Reset request list ptr.
