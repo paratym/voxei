@@ -39,7 +39,7 @@ impl Mouse {
                 self.position = (x, y);
             }
             SubmitInput::Delta(x, y) => {
-                self.delta = (x, y);
+                self.delta = (self.delta.0 + x, self.delta.1 + y);
             }
         }
     }

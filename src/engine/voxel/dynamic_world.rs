@@ -98,8 +98,6 @@ impl DynVoxelWorld {
                 }
             }
         }
-
-        println!("Unloaded chunks: {:?}", unloaded);
     }
 
     fn unload_chunk(&mut self, local_chunk_pos: DynChunkPos) {
