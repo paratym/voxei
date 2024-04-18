@@ -16,6 +16,7 @@ pub struct DynVoxelWorld {
     chunk_occupancy_mask: GridMask,
     brick_indices_grid: BrickIndexGrid,
     brick_data: BrickDataList,
+    brick_material_data: BrickMaterialList,
 
     brick_changes: Vec<BrickChange>,
 
@@ -39,6 +40,7 @@ impl DynVoxelWorld {
             chunk_occupancy_mask: GridMask::new(chunk_render_volume as usize),
             brick_indices_grid: BrickIndexGrid::new(brick_render_volume as usize),
             brick_data: BrickDataList::new(),
+            brick_material_data: BrickMaterialList::new(),
 
             brick_changes: Vec::new(),
 
@@ -136,7 +138,8 @@ impl DynVoxelWorld {
                     self.set_brick(dyn_brick_morton, None);
                 } else {
                     let brick_data = BrickData::from_voxel_array(generated_voxels);
-                    self.set_brick(dyn_brick_morton, Some(brick_data));
+                    let brick_material_data = BrickMaterialData::new();
+                    self.set_brick(dyn_brick_morton, Some((brick_data, brick_material_data)));
                 }
             }
         }
@@ -148,9 +151,11 @@ impl DynVoxelWorld {
             .set_status(morton, SpatialStatus::Loading);
     }
 
-    pub fn set_brick(&mut self, morton: u64, brick: Option<BrickData>) {
-        let brick_index = if let Some(brick) = brick {
-            let index = self.brick_data.insert(brick);
+    pub fn set_brick(&mut self, morton: u64, brick: Option<(BrickData, BrickMaterialData)>) {
+        let brick_index = if let Some((mut brick_data, brick_material_data)) = brick {
+            let material_index = self.brick_material_data.insert(brick_material_data);
+            brick_data.material_index = material_index;
+            let index = self.brick_data.insert(brick_data);
             BrickIndex::new_loaded(index)
         } else {
             BrickIndex::new_loaded_empty()
@@ -171,6 +176,10 @@ impl DynVoxelWorld {
 
     pub fn brick_indices_grid(&self) -> &BrickIndexGrid {
         &self.brick_indices_grid
+    }
+
+    pub fn brick_material_data(&self) -> &BrickMaterialList {
+        &self.brick_material_data
     }
 
     pub fn chunk_render_distance(&self) -> ChunkRadius {
@@ -369,8 +378,97 @@ impl BrickData {
             voxel_mask,
         }
     }
+
+    pub fn material_index(&self) -> u32 {
+        self.material_index
+    }
 }
 
 pub struct BrickChange {
     pub brick_morton: Morton,
+}
+
+pub struct BrickMaterialList {
+    free_head: u32,
+    data: Vec<BrickMaterialData>,
+}
+
+impl BrickMaterialList {
+    pub fn new() -> Self {
+        Self {
+            free_head: NULL_FREE_INDEX,
+            data: Vec::new(),
+        }
+    }
+
+    pub fn insert(&mut self, brick_data: BrickMaterialData) -> u32 {
+        if self.free_head != NULL_FREE_INDEX {
+            let new_index = self.free_head;
+            self.free_head = self.data[self.free_head as usize].get_next_free_index();
+            self.data[new_index as usize] = brick_data;
+
+            return new_index;
+        } else {
+            self.data.push(brick_data);
+            return self.data.len() as u32 - 1;
+        }
+    }
+
+    pub fn get(&self, index: u32) -> &BrickMaterialData {
+        &self.data[index as usize]
+    }
+}
+
+#[repr(C)]
+pub struct BrickMaterialData {
+    voxels: [PackedVoxelMaterial; BRICK_VOLUME],
+}
+
+impl BrickMaterialData {
+    pub fn new() -> Self {
+        Self {
+            voxels: [PackedVoxelMaterial::new([0.3, 0.6, 0.8], [0.0, 1.0, 0.0]); BRICK_VOLUME],
+        }
+    }
+
+    pub fn set_free_index(&mut self, free: u32) {
+        self.voxels[0].set_free_index(free);
+    }
+
+    pub fn get_next_free_index(&self) -> u32 {
+        self.voxels[0].material as u32
+    }
+}
+
+/// free bit, 3 bit padding, u8,u8,u8 albedo, i12,i12,i12 normals
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub struct PackedVoxelMaterial {
+    material: u64,
+}
+
+impl PackedVoxelMaterial {
+    pub fn new(albedo: [f32; 3], normals: [f32; 3]) -> Self {
+        let albedo = [
+            (albedo[0] * 255.0) as u8,
+            (albedo[1] * 255.0) as u8,
+            (albedo[2] * 255.0) as u8,
+        ];
+
+        let normals = [
+            (normals[0] * 2047.0 + 2047.0) as u16 & 0x0FFF,
+            (normals[1] * 2047.0 + 2047.0) as u16 & 0x0FFF,
+            (normals[2] * 2047.0 + 2047.0) as u16 & 0x0FFF,
+        ];
+
+        let albedo = (albedo[0] as u64) << 16 | (albedo[1] as u64) << 8 | albedo[2] as u64;
+        let normals = (normals[0] as u64) << 24 | (normals[1] as u64) << 12 | normals[2] as u64;
+        Self {
+            material: albedo << 36 | normals,
+        }
+    }
+
+    pub fn set_free_index(&mut self, free: u32) {
+        self.material = free as u64;
+    }
 }

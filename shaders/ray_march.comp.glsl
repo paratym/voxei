@@ -1,4 +1,4 @@
-layout (local_size_x = 32, local_size_y = 32, local_size_z = 1) in;
+layout (local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
 
 #include "lib/constants.glsl"
 #include "lib/types.glsl"
@@ -28,11 +28,12 @@ const uint32_t MARCH_ITERATIONS = 2048;
 const float EPSILON = 0.000001;
 
 TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info) {
-  if(data_index >= 100000) {
+  if(data_index >= 1000) {
     return trace_world_out_hit(vec3(0.6, 0.1, 0.1));
   }
 
   BrickDataList brick_data_list = get_buffer(info.brick_data_buffer, BrickDataList);
+  BrickMaterialDataList brick_material_data_list = get_buffer(info.brick_material_buffer, BrickMaterialDataList);
   BrickData brick_data = brick_data_list.data[data_index];
 
   i32vec3 map_pos = i32vec3(floor(ray.origin));
@@ -48,9 +49,9 @@ TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWor
     uint32_t voxel_morton = morton_encode_3(map_pos.x, map_pos.y, map_pos.z);
     uint32_t voxel_status = brick_data.voxel_mask[voxel_morton >> 3] & (1 << (voxel_morton & 7));
     if(voxel_status > 0) {
-      vec3 vox_normal = vec3(lessThanEqual(last_t.xyz, min(last_t.yzx, last_t.zxy))) * -step_axes;
-      normal = (last_t.x + last_t.y + last_t.z) == 0.0 ? normal : vox_normal;
-      return trace_world_out_hit(normal);
+      BrickMaterialData material_data = brick_material_data_list.data[brick_data.material_index];
+      VoxelMaterial mat = unpack_voxel(material_data.voxels[voxel_morton]);
+      return trace_world_out_hit(mat.albedo);
     }
 
     bvec3 mask = lessThanEqual(curr_t.xyz, min(curr_t.yzx, curr_t.zxy));

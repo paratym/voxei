@@ -28,10 +28,10 @@ impl Time {
         time.last_time = time.time;
         time.time = Instant::now();
         time.delta_time = time.time.duration_since(time.last_time);
-        // println!(
-        //     "Delta in ms: {}",
-        //     time.delta_time.as_micros() as f32 / 1000.0
-        // );
+        println!(
+            "Delta in ms: {}",
+            time.delta_time.as_micros() as f32 / 1000.0
+        );
         // println!(
         //     "FPS: {}",
         //     1.0 / (time.delta_time.as_micros() as f32 / 1000000.0)
