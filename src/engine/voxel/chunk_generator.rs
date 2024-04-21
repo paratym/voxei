@@ -167,11 +167,10 @@ impl ChunkGenerator {
                         let diff = height - world_vox_pos.y as f32;
                         if diff <= 3.0 && diff >= 0.0 {
                             let morton = Morton::encode(Vector3::new(x as u32, y as u32, z as u32));
-                            data[*morton as usize] = Some(Vector3::new(
-                                x as f32 / CHUNK_VOXEL_LENGTH as f32,
-                                y as f32 / CHUNK_VOXEL_LENGTH as f32,
-                                z as f32 / CHUNK_VOXEL_LENGTH as f32,
-                            ));
+                            let random_y = rand::random::<f32>() * 0.1;
+                            let random_x = rand::random::<f32>() * 0.075;
+                            data[*morton as usize] =
+                                Some(Vector3::new(random_x, 0.5 + random_y, 0.0));
                             is_empty = false;
                         }
                     }

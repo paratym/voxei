@@ -14,6 +14,7 @@ use super::{
 pub struct DynVoxelWorld {
     super_chunk_grid_mask: GridMask,
     chunk_occupancy_mask: GridMask,
+    chunk_bit_mask: BitGridMask,
     brick_indices_grid: BrickIndexGrid,
     brick_data: BrickDataList,
     brick_palette_data: BrickPaletteList,
@@ -38,6 +39,7 @@ impl DynVoxelWorld {
         Self {
             super_chunk_grid_mask: GridMask::new(super_chunk_render_volume as usize),
             chunk_occupancy_mask: GridMask::new(chunk_render_volume as usize),
+            chunk_bit_mask: BitGridMask::new(chunk_render_volume as usize),
             brick_indices_grid: BrickIndexGrid::new(brick_render_volume as usize),
             brick_data: BrickDataList::new(),
             brick_palette_data: BrickPaletteList::new(),
@@ -106,6 +108,7 @@ impl DynVoxelWorld {
         let morton = local_chunk_pos.morton();
         self.chunk_occupancy_mask
             .set_status(morton, SpatialStatus::Unloaded);
+        self.chunk_bit_mask.set_status(morton, false);
     }
 
     pub fn chunk_status(&self, local_chunk_pos: DynChunkPos) -> SpatialStatus {
@@ -127,6 +130,7 @@ impl DynVoxelWorld {
         } else {
             self.chunk_occupancy_mask
                 .set_status(morton, SpatialStatus::Loaded);
+            self.chunk_bit_mask.set_status(morton, true);
             let local_brick_min = local_chunk_pos.to_dyn_brick_pos();
             let local_brick_min_morton = *local_brick_min.morton();
             for brick_morton in 0..CHUNK_VOLUME {
@@ -180,6 +184,10 @@ impl DynVoxelWorld {
 
     pub fn chunk_occupancy_grid(&self) -> &GridMask {
         &self.chunk_occupancy_mask
+    }
+
+    pub fn chunk_bit_grid(&self) -> &BitGridMask {
+        &self.chunk_bit_mask
     }
 
     pub fn brick_indices_grid(&self) -> &BrickIndexGrid {
@@ -284,6 +292,37 @@ impl GridMask {
 
     pub fn buffer_size(&self) -> usize {
         self.0.len() * std::mem::size_of::<u16>()
+    }
+}
+
+pub struct BitGridMask(Vec<u8>);
+
+impl BitGridMask {
+    pub fn new(volume: usize) -> Self {
+        Self(vec![0; volume / 8])
+    }
+
+    pub fn set_status(&mut self, morton: Morton, status: bool) {
+        let bit_index = *morton & 0b111;
+        // Clear the status bits
+        self.0[(*morton >> 3) as usize] &= !(1 << bit_index);
+        // Set the status bits
+        self.0[(*morton >> 3) as usize] |= (status as u8) << bit_index;
+    }
+
+    pub fn status(&self, morton: Morton) -> bool {
+        let bit_index = *morton & 0b111;
+        let status = self.0[(*morton >> 3) as usize] >> bit_index;
+
+        status == 1
+    }
+
+    pub fn as_slice(&self) -> &[u8] {
+        &self.0
+    }
+
+    pub fn buffer_size(&self) -> usize {
+        self.0.len() * std::mem::size_of::<u8>()
     }
 }
 

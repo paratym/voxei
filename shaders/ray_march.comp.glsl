@@ -24,7 +24,6 @@ TraceWorldOut trace_world_out_hit(vec3 color) {
   return TraceWorldOut(color, true);
 }
 
-const uint32_t MARCH_ITERATIONS = 2048;
 const float EPSILON = 0.000001;
 
 TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info) {
@@ -135,20 +134,12 @@ TraceWorldOut trace_vox_world(Ray ray) {
 
   // debugPrintfEXT("dyn_world_chunk_local: %u %u %u\n", dyn_world_chunk_local.x, dyn_world_chunk_local.y, dyn_world_chunk_local.z);
 
-  for (uint32_t i = 0; i < 100; i++) {
-    if(map_pos.x < 0 || map_pos.y < 0 || map_pos.z < 0 || map_pos.x >= info.chunk_side_length || map_pos.y >= info.chunk_side_length || map_pos.z >= info.chunk_side_length) {
-      return trace_world_out_hit(vec3(0,(i+1)/40.0,0));
-    }
+  while(map_pos.x >= 0 && map_pos.y >= 0 && map_pos.z >= 0 && map_pos.x < info.chunk_side_length && map_pos.y < info.chunk_side_length && map_pos.z < info.chunk_side_length) {
 
     u32vec3 translated_map_pos = u32vec3((map_pos + i32vec3(info.chunk_side_length) + info.chunk_translation) % info.chunk_side_length);
     uint32_t chunk_morton = morton_encode_3(translated_map_pos.x, translated_map_pos.y, translated_map_pos.z);
-    uint32_t chunk_status = ((chunk_occupancy_grid.grid[chunk_morton >> 3] >> ((chunk_morton & 7) * 2)) & 3);
-    if(chunk_status == 0) {
-      // Handle unloaded chunk case
-    } else if(chunk_status == 1) {
-      // handle it is loading rn.
-    } else if(chunk_status == 2) {
-      // Show that chunk.
+    uint32_t chunk_status = ((chunk_occupancy_grid.grid[chunk_morton >> 3] >> (chunk_morton & 7)) & 1);
+    if(chunk_status == 1) {
       vec3 chunk_enter_pos = ray.origin + ray.dir * (min(min(last_t.x, last_t.y), last_t.z));
       Ray brick_local_ray = Ray((clamp(chunk_enter_pos - map_pos, EPSILON, 1.0 - EPSILON)) * CHUNK_LENGTH, ray.dir, ray.inv_dir);
       vec3 normal = vec3(lessThanEqual(last_t.xyz, min(last_t.yzx, last_t.zxy))) * -step_axes;
@@ -164,7 +155,7 @@ TraceWorldOut trace_vox_world(Ray ray) {
     map_pos += i32vec3(mask) * step_axes;
   }
 
-  return trace_world_out_hit(vec3(enter_pos));
+  return trace_world_out_hit(vec3(0,0.5,0.8));
 }
 
 void main() {

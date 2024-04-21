@@ -206,8 +206,8 @@ impl VoxelPipeline {
             command_recorder,
             self.chunk_occupancy_grid_buffer,
             AccessFlags::SHADER_READ,
-            |ptr: *mut u16| unsafe {
-                let grid_slice = vox_world.dyn_world().chunk_occupancy_grid().as_slice();
+            |ptr: *mut u8| unsafe {
+                let grid_slice = vox_world.dyn_world().chunk_bit_grid().as_slice();
                 ptr.copy_from_nonoverlapping(grid_slice.as_ptr(), grid_slice.len());
             },
         );
@@ -259,7 +259,7 @@ impl VoxelPipeline {
             let mut brick_palette_staging_ptr =
                 device.map_buffer_typed::<PackedVoxelMaterial>(brick_palette_staging_buffer);
             let mut brick_palette_staging_index = 0;
-            let mut brick_palette_indices_staging_ptr =
+            let brick_palette_indices_staging_ptr =
                 device.map_buffer_typed::<u8>(brick_palette_indices_staging_buffer);
 
             let mut brick_indices_copies = Vec::new();
@@ -491,7 +491,7 @@ impl VoxelPipeline {
         create_device_buffer(
             device,
             "chunk_occupancy_grid_buffer",
-            vox_world.chunk_occupancy_grid().buffer_size() as u64,
+            vox_world.chunk_bit_grid().buffer_size() as u64,
         )
     }
 

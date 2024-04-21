@@ -37,7 +37,7 @@ DECL_BUFFER(16) Camera {
 };
 
 DECL_BUFFER(4) ChunkOccupancyGrid {
-  uint16_t grid[];
+  uint8_t grid[];
 };
 
 DECL_BUFFER_COHERENT(4) BrickIndicesGrid {
