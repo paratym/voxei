@@ -31,6 +31,9 @@ pub struct Settings {
     /// The max # of bricks that can be stored in the brick data buffer.
     pub brick_data_max_size: u32,
 
+    /// The max # of 256 brick palettes that can be stored on the gpu.
+    pub brick_palette_max_size: u32,
+
     /// The max # of bricks that can requested per frame on the gpu.
     pub brick_request_max_size: u32,
 
@@ -47,12 +50,13 @@ impl Default for Settings {
             camera_fov: consts::FRAC_PI_2,
             mouse_sensitivity: 0.05,
 
-            chunk_render_distance: ChunkRadius::new(8),
+            chunk_render_distance: ChunkRadius::new(14),
             chunk_dyn_loaded_distance: ChunkRadius::new(5),
             chunk_loaded_distance: ChunkRadius::new(32),
             chunk_generation_distance: ChunkRadius::new(4),
 
-            brick_data_max_size: 10000,
+            brick_data_max_size: 100000,
+            brick_palette_max_size: 100000,
             brick_request_max_size: 64,
             brick_load_max_size: 128,
 

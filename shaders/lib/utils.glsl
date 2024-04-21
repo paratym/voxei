@@ -62,13 +62,10 @@
 //   return AABB(voxel_world_min, voxel_world_max);
 // }
 
-VoxelMaterial unpack_voxel(uint64_t voxel) {
-  uint64_t normal_u = (voxel & 0xffffffff) | (((voxel >> 32) & 0xf) << 32);
-  vec3 normal = vec3(float(normal_u & 0xfff), float((normal_u >> 10) & 0xfff), float((normal_u >> 20) & 0xfff));
-  normal = (normal - 2047) / 2047.0;
-  uint32_t albedo_u = uint32_t((voxel >> 36) & 0xffffff);
-  vec3 albedo = vec3(float(albedo_u & 0xff), float((albedo_u >> 8) & 0xff), float((albedo_u >> 16) & 0xff)) / 255.0;
-  return VoxelMaterial(albedo, normal);
+VoxelMaterial unpack_voxel(uint32_t voxel) {
+  uint32_t albedo_u = voxel & 0xffffff;
+  vec3 albedo = vec3(float((albedo_u >> 16) & 0xff), float((albedo_u >> 8) & 0xff), float(albedo_u & 0xff)) / 255.0;
+  return VoxelMaterial(albedo, vec3(0,0,0));
 }
 
 // Split first 10 bits by inserting two 0s to the left of each bit.

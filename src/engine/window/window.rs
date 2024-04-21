@@ -45,7 +45,7 @@ impl Window {
     pub fn new(config: &WindowConfig, event_loop: &winit::event_loop::EventLoop<()>) -> Self {
         let winit_window = winit::window::WindowBuilder::new()
             .with_title(config.title.clone())
-            .with_visible(false)
+            .with_visible(true)
             .build(event_loop)
             .unwrap();
 
@@ -54,7 +54,7 @@ impl Window {
 
     pub fn set_cursor_grabbed(&mut self, grabbed: bool) {
         let grab_mode = if grabbed {
-            winit::window::CursorGrabMode::Locked
+            winit::window::CursorGrabMode::Confined
         } else {
             winit::window::CursorGrabMode::None
         };

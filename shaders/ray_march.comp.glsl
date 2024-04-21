@@ -28,13 +28,14 @@ const uint32_t MARCH_ITERATIONS = 2048;
 const float EPSILON = 0.000001;
 
 TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info) {
-  if(data_index >= 1000) {
+  if(data_index >= 100000) {
     return trace_world_out_hit(vec3(0.6, 0.1, 0.1));
   }
 
   BrickDataList brick_data_list = get_buffer(info.brick_data_buffer, BrickDataList);
-  BrickMaterialDataList brick_material_data_list = get_buffer(info.brick_material_buffer, BrickMaterialDataList);
   BrickData brick_data = brick_data_list.data[data_index];
+  BrickPaletteList brick_palette_list = get_buffer(info.brick_palette_list_buffer, BrickPaletteList);
+  BrickPaletteIndicesList brick_palette_indices_list = get_buffer(info.brick_palette_indices_list_buffer, BrickPaletteIndicesList);
 
   i32vec3 map_pos = i32vec3(floor(ray.origin));
   i32vec3 step_axes = i32vec3(sign(ray.dir));
@@ -49,8 +50,10 @@ TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWor
     uint32_t voxel_morton = morton_encode_3(map_pos.x, map_pos.y, map_pos.z);
     uint32_t voxel_status = brick_data.voxel_mask[voxel_morton >> 3] & (1 << (voxel_morton & 7));
     if(voxel_status > 0) {
-      BrickMaterialData material_data = brick_material_data_list.data[brick_data.material_index];
-      VoxelMaterial mat = unpack_voxel(material_data.voxels[voxel_morton]);
+      uint32_t palette_index = brick_data.palette_index & 0x3FFFFFFF;
+      uint32_t voxel_index = brick_palette_indices_list.indices[data_index * BRICK_VOLUME + voxel_morton];
+      uint32_t packed_voxel = brick_palette_list.voxels[palette_index + voxel_index];
+      VoxelMaterial mat = unpack_voxel(packed_voxel);
       return trace_world_out_hit(mat.albedo);
     }
 

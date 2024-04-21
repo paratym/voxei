@@ -32,7 +32,8 @@ use crate::{
         resource::{Res, ResMut},
         voxel::{
             dynamic_world::{
-                BrickChange, BrickData, BrickIndex, BrickMaterialData, DynVoxelWorld, SpatialStatus,
+                BrickChange, BrickData, BrickIndex, BrickPalette, DynVoxelWorld,
+                PackedVoxelMaterial, SpatialStatus,
             },
             util::Morton,
             vox_constants::BRICK_VOLUME,
@@ -53,7 +54,8 @@ struct WorldInfo {
     chunk_occupancy_mask_buffer: PackedGpuResourceId,
     brick_indices_grid_buffer: PackedGpuResourceId,
     brick_data_buffer: PackedGpuResourceId,
-    brick_material_buffer: PackedGpuResourceId,
+    brick_palette_list_buffer: PackedGpuResourceId,
+    brick_palette_indices_buffer: PackedGpuResourceId,
     brick_request_list_buffer: PackedGpuResourceId,
 
     dyn_chunk_side_length: u32,
@@ -94,7 +96,8 @@ pub struct VoxelPipeline {
     chunk_occupancy_grid_buffer: BufferId,
     brick_indices_grid_buffer: BufferId,
     brick_data_buffer: BufferId,
-    brick_material_data_buffer: BufferId,
+    brick_palette_data_buffer: BufferId,
+    brick_palette_indices_buffer: BufferId,
 
     brick_request_staging_buffers: Vec<BufferId>,
     brick_request_list_buffer: BufferId,
@@ -119,7 +122,8 @@ impl VoxelPipeline {
             Self::create_brick_indices_grid_buffer(device, vox_world.dyn_world());
 
         let brick_data_buffer = Self::create_brick_data_buffer(device, settings);
-        let brick_material_data_buffer = Self::create_brick_material_data_buffer(device, settings);
+        let brick_palette_data_buffer = Self::create_palette_data_buffer(device, settings);
+        let brick_palette_indices_buffer = Self::create_palette_indices_buffer(device, settings);
 
         let brick_request_staging_buffers = (0..constants::MAX_FRAMES_IN_FLIGHT)
             .map(|i| Self::create_brick_request_list_staging_buffer(device, settings, i as u32))
@@ -137,7 +141,8 @@ impl VoxelPipeline {
             chunk_occupancy_grid_buffer,
             brick_indices_grid_buffer,
             brick_data_buffer,
-            brick_material_data_buffer,
+            brick_palette_data_buffer,
+            brick_palette_indices_buffer,
 
             brick_request_staging_buffers,
             brick_request_list_buffer,
@@ -176,7 +181,8 @@ impl VoxelPipeline {
                     chunk_occupancy_mask_buffer: self.chunk_occupancy_grid_buffer.pack(),
                     brick_indices_grid_buffer: self.brick_indices_grid_buffer.pack(),
                     brick_data_buffer: self.brick_data_buffer.pack(),
-                    brick_material_buffer: self.brick_material_data_buffer.pack(),
+                    brick_palette_list_buffer: self.brick_palette_data_buffer.pack(),
+                    brick_palette_indices_buffer: self.brick_palette_indices_buffer.pack(),
                     brick_request_list_buffer: self.brick_request_list_buffer.pack(),
 
                     dyn_chunk_side_length: vox_world
@@ -223,26 +229,43 @@ impl VoxelPipeline {
                 memory_location: MemoryLocation::CpuToGpu,
                 usage: BufferUsageFlags::TRANSFER_SRC,
             });
-            let brick_material_data_staging_buffer = device.create_buffer(BufferInfo {
+            let brick_palette_staging_buffer = device.create_buffer(BufferInfo {
                 name: format!("brick_material_data_staging_buffer_{}", cpu_frame_index).to_owned(),
-                size: std::mem::size_of::<BrickMaterialData>() as u64 * brick_change_upload_size,
+                size: std::mem::size_of::<PackedVoxelMaterial>() as u64
+                    * 256
+                    * brick_change_upload_size,
                 memory_location: MemoryLocation::CpuToGpu,
                 usage: BufferUsageFlags::TRANSFER_SRC,
             });
+            let brick_palette_indices_staging_buffer = device.create_buffer(BufferInfo {
+                name: format!("brick_palette_indices_staging_buffer_{}", cpu_frame_index)
+                    .to_owned(),
+                size: std::mem::size_of::<u8>() as u64
+                    * BRICK_VOLUME as u64
+                    * brick_change_upload_size,
+                memory_location: MemoryLocation::CpuToGpu,
+                usage: BufferUsageFlags::TRANSFER_SRC,
+            });
+
             command_recorder.destroy_buffer_deferred(brick_indices_staging_buffer);
             command_recorder.destroy_buffer_deferred(brick_data_staging_buffer);
-            command_recorder.destroy_buffer_deferred(brick_material_data_staging_buffer);
+            command_recorder.destroy_buffer_deferred(brick_palette_staging_buffer);
+            command_recorder.destroy_buffer_deferred(brick_palette_indices_staging_buffer);
 
             let brick_indices_staging_ptr =
                 device.map_buffer_typed::<BrickIndex>(brick_indices_staging_buffer);
             let brick_data_staging_ptr =
                 device.map_buffer_typed::<BrickData>(brick_data_staging_buffer);
-            let brick_material_data_staging_ptr =
-                device.map_buffer_typed::<BrickMaterialData>(brick_material_data_staging_buffer);
+            let mut brick_palette_staging_ptr =
+                device.map_buffer_typed::<PackedVoxelMaterial>(brick_palette_staging_buffer);
+            let mut brick_palette_staging_index = 0;
+            let mut brick_palette_indices_staging_ptr =
+                device.map_buffer_typed::<u8>(brick_palette_indices_staging_buffer);
 
             let mut brick_indices_copies = Vec::new();
             let mut brick_data_copies = Vec::new();
-            let mut brick_material_data_copies = Vec::new();
+            let mut brick_palette_copies = Vec::new();
+            let mut brick_palette_indices_copies = Vec::new();
             let time = Instant::now();
             for brick_update in self.queued_brick_updates.drain(
                 (self.queued_brick_updates.len() as isize - brick_change_upload_size as isize)
@@ -289,29 +312,48 @@ impl VoxelPipeline {
                         size: std::mem::size_of::<BrickData>() as u64,
                     });
 
-                    let brick_material_index = brick_data.material_index();
-                    if brick_material_index >= settings.brick_data_max_size {
-                        // println!("Brick material data buffer on gpu is too small, can't add new bricks.");
+                    let brick_palette_index = brick_data.palette_index();
+                    if brick_palette_index >= settings.brick_palette_max_size * 256 {
+                        // println!("Brick palette buffer on gpu is too small, can't add new bricks palettes.");
                         continue;
                     }
 
-                    let brick_material_data_stage_index = brick_material_data_copies.len();
-                    let brick_material_data_offset_ptr = unsafe {
-                        brick_material_data_staging_ptr.add(brick_material_data_stage_index)
-                    };
-                    let brick_material_data = vox_world
+                    let brick_palette = vox_world
                         .dyn_world()
-                        .brick_material_data()
-                        .get(brick_material_index);
+                        .brick_palette_list()
+                        .get(brick_palette_index, brick_data.palette_size());
                     unsafe {
-                        brick_material_data_offset_ptr.copy_from(brick_material_data as *const _, 1)
+                        brick_palette_staging_ptr
+                            .copy_from(brick_palette.as_ptr(), brick_palette.len())
                     };
-                    brick_material_data_copies.push(CopyRegion {
-                        src_offset: brick_material_data_stage_index as u64
-                            * std::mem::size_of::<BrickMaterialData>() as u64,
-                        dst_offset: brick_material_index as u64
-                            * std::mem::size_of::<BrickMaterialData>() as u64,
-                        size: std::mem::size_of::<BrickMaterialData>() as u64,
+                    brick_palette_copies.push(CopyRegion {
+                        src_offset: brick_palette_staging_index
+                            * std::mem::size_of::<PackedVoxelMaterial>() as u64,
+                        dst_offset: brick_palette_index as u64
+                            * std::mem::size_of::<PackedVoxelMaterial>() as u64,
+                        size: std::mem::size_of::<PackedVoxelMaterial>() as u64
+                            * brick_palette.len() as u64,
+                    });
+
+                    brick_palette_staging_index += brick_palette.len() as u64;
+                    brick_palette_staging_ptr =
+                        unsafe { brick_palette_staging_ptr.add(brick_palette.len() as usize) };
+
+                    let brick_palette_indices =
+                        vox_world.dyn_world().brick_data().get_indices(brick_index);
+                    let brick_palette_indices_stage_index = brick_data_stage_index * BRICK_VOLUME;
+                    let brick_palette_indices_offset_ptr = unsafe {
+                        brick_palette_indices_staging_ptr
+                            .add(brick_palette_indices_stage_index as usize)
+                    };
+                    unsafe {
+                        brick_palette_indices_offset_ptr
+                            .copy_from(brick_palette_indices.as_ptr(), BRICK_VOLUME)
+                    };
+                    brick_palette_indices_copies.push(CopyRegion {
+                        src_offset: brick_palette_indices_stage_index as u64,
+                        dst_offset: brick_index as u64 * BRICK_VOLUME as u64,
+                        size: BRICK_VOLUME as u64,
                     });
                 }
             }
@@ -332,9 +374,15 @@ impl VoxelPipeline {
                 );
                 command_recorder.copy_buffer_to_buffer_multiple(
                     device,
-                    brick_material_data_staging_buffer,
-                    self.brick_material_data_buffer,
-                    brick_material_data_copies,
+                    brick_palette_staging_buffer,
+                    self.brick_palette_data_buffer,
+                    brick_palette_copies,
+                );
+                command_recorder.copy_buffer_to_buffer_multiple(
+                    device,
+                    brick_palette_indices_staging_buffer,
+                    self.brick_palette_indices_buffer,
+                    brick_palette_indices_copies,
                 );
             }
             // println!("Time to upload bricks: {:?}", time.elapsed());
@@ -466,11 +514,21 @@ impl VoxelPipeline {
         )
     }
 
-    fn create_brick_material_data_buffer(device: &mut Device, settings: &Settings) -> BufferId {
+    fn create_palette_data_buffer(device: &mut Device, settings: &Settings) -> BufferId {
         create_device_buffer(
             device,
-            "brick_material_data_buffer",
-            std::mem::size_of::<BrickMaterialData>() as u64 * settings.brick_data_max_size as u64,
+            "brick_palette_buffer",
+            settings.brick_palette_max_size as u64
+                * std::mem::size_of::<PackedVoxelMaterial>() as u64
+                * 256,
+        )
+    }
+
+    fn create_palette_indices_buffer(device: &mut Device, settings: &Settings) -> BufferId {
+        create_device_buffer(
+            device,
+            "brick_palette_indices_buffer",
+            settings.brick_data_max_size as u64 * BRICK_VOLUME as u64,
         )
     }
 

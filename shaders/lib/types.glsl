@@ -46,20 +46,20 @@ DECL_BUFFER_COHERENT(4) BrickIndicesGrid {
 };
 
 struct BrickData {
-  uint32_t material_index;
   uint8_t voxel_mask[BRICK_AREA];
+  uint32_t palette_index;
 };
 
 DECL_BUFFER(4) BrickDataList {
   BrickData data[];
 };
 
-struct BrickMaterialData {
-  uint64_t voxels[BRICK_VOLUME]; 
+DECL_BUFFER(4) BrickPaletteList {
+  uint32_t voxels[];
 };
 
-DECL_BUFFER(4) BrickMaterialDataList {
-  BrickMaterialData data[];
+DECL_BUFFER(4) BrickPaletteIndicesList {
+  uint8_t indices[];
 };
 
 struct BrickRequest {
@@ -77,7 +77,8 @@ DECL_BUFFER(16) VoxelWorldInfo {
   ResourceId chunk_occupancy_grid_buffer;
   ResourceId brick_indices_grid_buffer;
   ResourceId brick_data_buffer;
-  ResourceId brick_material_buffer;
+  ResourceId brick_palette_list_buffer;
+  ResourceId brick_palette_indices_list_buffer;
   ResourceId brick_request_list_buffer;
 
   uint32_t chunk_side_length;

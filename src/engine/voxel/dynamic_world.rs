@@ -4,7 +4,7 @@ use crate::{engine::voxel::vox_constants::CHUNK_VOLUME, settings::Settings};
 
 use super::{
     chunk_generator::GeneratedChunk,
-    util::Morton,
+    util::{next_pow2, Morton},
     vox_constants::{BRICK_AREA, BRICK_VOLUME, SUPER_CHUNK_VOLUME},
     vox_world::{ChunkRadius, DynChunkPos, WorldChunkPos},
 };
@@ -16,7 +16,7 @@ pub struct DynVoxelWorld {
     chunk_occupancy_mask: GridMask,
     brick_indices_grid: BrickIndexGrid,
     brick_data: BrickDataList,
-    brick_material_data: BrickMaterialList,
+    brick_palette_data: BrickPaletteList,
 
     brick_changes: Vec<BrickChange>,
 
@@ -40,7 +40,7 @@ impl DynVoxelWorld {
             chunk_occupancy_mask: GridMask::new(chunk_render_volume as usize),
             brick_indices_grid: BrickIndexGrid::new(brick_render_volume as usize),
             brick_data: BrickDataList::new(),
-            brick_material_data: BrickMaterialList::new(),
+            brick_palette_data: BrickPaletteList::new(),
 
             brick_changes: Vec::new(),
 
@@ -137,9 +137,9 @@ impl DynVoxelWorld {
                 if is_empty {
                     self.set_brick(dyn_brick_morton, None);
                 } else {
-                    let brick_data = BrickData::from_voxel_array(generated_voxels);
-                    let brick_material_data = BrickMaterialData::new();
-                    self.set_brick(dyn_brick_morton, Some((brick_data, brick_material_data)));
+                    let brick_data = BrickData::from_voxel_array(&generated_voxels);
+                    let brick_palette = BrickPalette::from_voxel_array(&generated_voxels);
+                    self.set_brick(dyn_brick_morton, Some((brick_data, brick_palette)));
                 }
             }
         }
@@ -151,11 +151,19 @@ impl DynVoxelWorld {
             .set_status(morton, SpatialStatus::Loading);
     }
 
-    pub fn set_brick(&mut self, morton: u64, brick: Option<(BrickData, BrickMaterialData)>) {
-        let brick_index = if let Some((mut brick_data, brick_material_data)) = brick {
-            let material_index = self.brick_material_data.insert(brick_material_data);
-            brick_data.material_index = material_index;
-            let index = self.brick_data.insert(brick_data);
+    pub fn set_brick(&mut self, morton: u64, brick: Option<(BrickData, BrickPalette)>) {
+        let brick_index = if let Some((mut brick_data, mut brick_material_data)) = brick {
+            let size_i = match brick_material_data.next_pow_2_size() {
+                32 => 0,
+                64 => 1,
+                128 => 2,
+                256 => 3,
+                _ => unreachable!(),
+            };
+            let indices = brick_material_data.indices.take();
+            let material_index = self.brick_palette_data.insert(brick_material_data);
+            brick_data.palette_index = material_index | (size_i << 30);
+            let index = self.brick_data.insert(brick_data, *indices.unwrap());
             BrickIndex::new_loaded(index)
         } else {
             BrickIndex::new_loaded_empty()
@@ -178,8 +186,8 @@ impl DynVoxelWorld {
         &self.brick_indices_grid
     }
 
-    pub fn brick_material_data(&self) -> &BrickMaterialList {
-        &self.brick_material_data
+    pub fn brick_palette_list(&self) -> &BrickPaletteList {
+        &self.brick_palette_data
     }
 
     pub fn chunk_render_distance(&self) -> ChunkRadius {
@@ -308,6 +316,7 @@ impl BrickIndex {
 pub struct BrickDataList {
     free_head: u32,
     data: Vec<BrickData>,
+    palette_indices: Vec<u8>,
 }
 
 const NULL_FREE_INDEX: u32 = 0x7FFFFFFF;
@@ -317,19 +326,29 @@ impl BrickDataList {
         Self {
             free_head: NULL_FREE_INDEX,
             data: Vec::new(),
+            palette_indices: Vec::new(),
         }
     }
 
     /// Returns the brick list index for the inserted brick data.
-    pub fn insert(&mut self, brick_data: BrickData) -> u32 {
+    pub fn insert(
+        &mut self,
+        brick_data: BrickData,
+        brick_palette_indices: [u8; BRICK_VOLUME],
+    ) -> u32 {
         if self.free_head != NULL_FREE_INDEX {
             let new_index = self.free_head;
             self.free_head = self.data[self.free_head as usize].next_free();
             self.data[new_index as usize] = brick_data;
+            let indices_index = new_index as usize * BRICK_VOLUME;
+            self.palette_indices[indices_index..(indices_index + BRICK_VOLUME)]
+                .copy_from_slice(&brick_palette_indices);
 
             return new_index;
         } else {
             self.data.push(brick_data);
+            self.palette_indices
+                .extend_from_slice(&brick_palette_indices);
             return self.data.len() as u32 - 1;
         }
     }
@@ -337,33 +356,44 @@ impl BrickDataList {
     pub fn get(&self, index: u32) -> &BrickData {
         &self.data[index as usize]
     }
+
+    pub fn get_indices(&self, index: u32) -> &[u8] {
+        let index = index as usize * BRICK_VOLUME;
+        &self.palette_indices[index..(index + BRICK_VOLUME)]
+    }
+}
+
+#[repr(C)]
+union VoxelMask {
+    voxel_mask: [u8; BRICK_AREA],
+    next_free: u32,
 }
 
 #[repr(C)]
 pub struct BrickData {
-    // last bit determines if this is a free brick data, then the index points to the next free
-    // brick.
-    material_index: u32,
-    voxel_mask: [u8; BRICK_AREA],
+    voxel_mask: VoxelMask,
+    palette_index: u32,
 }
 
 impl BrickData {
     pub fn new_free(next_free: u32) -> Self {
         Self {
-            material_index: next_free | 0x8000_0000,
-            voxel_mask: [0; BRICK_AREA],
+            voxel_mask: VoxelMask {
+                voxel_mask: [0; BRICK_AREA],
+            },
+            palette_index: 0,
         }
     }
 
     pub fn set_free(&mut self, next_free: u32) {
-        self.material_index = next_free | 0x8000_0000;
+        self.voxel_mask = VoxelMask { next_free };
     }
 
     pub fn next_free(&self) -> u32 {
-        self.material_index & 0x7FFF_FFFF
+        unsafe { self.voxel_mask.next_free }
     }
 
-    pub fn from_voxel_array(voxel_data: Vec<Option<Vector3<f32>>>) -> Self {
+    pub fn from_voxel_array(voxel_data: &Vec<Option<Vector3<f32>>>) -> Self {
         let mut voxel_mask = [0; BRICK_AREA];
         for i in 0..BRICK_VOLUME {
             let voxel = &voxel_data[i];
@@ -373,14 +403,24 @@ impl BrickData {
         }
 
         Self {
-            // TODO - materials
-            material_index: 0,
-            voxel_mask,
+            voxel_mask: VoxelMask { voxel_mask },
+            palette_index: 0,
         }
     }
 
-    pub fn material_index(&self) -> u32 {
-        self.material_index
+    pub fn palette_index(&self) -> u32 {
+        self.palette_index & 0x3FFF_FFFF
+    }
+
+    pub fn palette_size(&self) -> u32 {
+        let size_bits = self.palette_index >> 30;
+        match size_bits {
+            0 => 32,
+            1 => 64,
+            2 => 128,
+            3 => 256,
+            _ => unreachable!(),
+        }
     }
 }
 
@@ -388,55 +428,121 @@ pub struct BrickChange {
     pub brick_morton: Morton,
 }
 
-pub struct BrickMaterialList {
+pub struct BrickPalette {
+    data: Vec<PackedVoxelMaterial>,
+    indices: Option<Box<[u8; BRICK_VOLUME]>>,
+}
+
+impl BrickPalette {
+    pub fn new(data: Vec<PackedVoxelMaterial>, indices: [u8; BRICK_VOLUME]) -> Self {
+        if data.len() > 256 {
+            panic!("Brick palette can only have a maximum of 256 entries");
+        }
+        Self {
+            data,
+            indices: Some(Box::new(indices)),
+        }
+    }
+
+    pub fn from_voxel_array(voxel_data: &Vec<Option<Vector3<f32>>>) -> Self {
+        let mut data = Vec::new();
+        let mut indices = [0; BRICK_VOLUME];
+        for i in 0..voxel_data.len() {
+            let voxel = &voxel_data[i];
+            if let Some(voxel) = voxel {
+                data.push(PackedVoxelMaterial::new(
+                    [voxel.x, voxel.y, voxel.z],
+                    [0.0; 3],
+                ));
+                indices[i] = data.len() as u8 - 1;
+            }
+        }
+
+        Self::new(data, indices)
+    }
+
+    pub fn next_pow_2_size(&self) -> u32 {
+        next_pow2(self.data.len() as u32).max(32)
+    }
+}
+
+pub struct BrickPaletteList {
+    voxels: Vec<PackedVoxelMaterial>,
     free_head: u32,
-    data: Vec<BrickMaterialData>,
 }
 
-impl BrickMaterialList {
+impl BrickPaletteList {
     pub fn new() -> Self {
         Self {
+            voxels: Vec::new(),
             free_head: NULL_FREE_INDEX,
-            data: Vec::new(),
         }
     }
 
-    pub fn insert(&mut self, brick_data: BrickMaterialData) -> u32 {
+    // Finds a chunk with the desired palette size, if one is found that is greater, then it is
+    // split
+    pub fn insert(&mut self, brick_palette: BrickPalette) -> u32 {
+        let palette_aligned_size = brick_palette.next_pow_2_size();
         if self.free_head != NULL_FREE_INDEX {
-            let new_index = self.free_head;
-            self.free_head = self.data[self.free_head as usize].get_next_free_index();
-            self.data[new_index as usize] = brick_data;
+            let mut new_index = self.free_head;
+            let mut next_free = NULL_FREE_INDEX;
+            let mut last_free = NULL_FREE_INDEX;
+            while new_index != NULL_FREE_INDEX {
+                last_free = new_index;
+                new_index = self.voxels[new_index as usize].material;
+                if self.voxels[(new_index + 1) as usize].material >= palette_aligned_size {
+                    next_free = self.voxels[new_index as usize].material;
+                    break;
+                }
+            }
+            if new_index == NULL_FREE_INDEX {
+                return self.append(brick_palette);
+            }
 
-            return new_index;
-        } else {
-            self.data.push(brick_data);
-            return self.data.len() as u32 - 1;
+            todo!("Splitting free chunk");
+            // let mut free_size = self.voxels[(new_index + 1) as usize].material;
+
+            // // Split the free chunk
+            // while free_size != palette_aligned_size {
+            //     let new_free_size = free_size / 2;
+            //     let split_index = new_index + new_free_size;
+            //     self.voxels[split_index as usize] = PackedVoxelMaterial {
+            //         material: next_free,
+            //     };
+            //     self.voxels[(split_index + 1) as usize] = PackedVoxelMaterial {
+            //         material: new_free_size,
+            //     };
+
+            //     free_size = new_free_size;
+            // }
+
+            // self.free_head = self.voxels[self.free_head as usize].get_next_free_index();
+            // for i in 0..brick_palette.data.len() {
+            //     self.voxels[new_index as usize + i] = brick_palette.data[i as usize];
+            // }
+
+            // return new_index;
         }
+        return self.append(brick_palette);
     }
 
-    pub fn get(&self, index: u32) -> &BrickMaterialData {
-        &self.data[index as usize]
-    }
-}
-
-#[repr(C)]
-pub struct BrickMaterialData {
-    voxels: [PackedVoxelMaterial; BRICK_VOLUME],
-}
-
-impl BrickMaterialData {
-    pub fn new() -> Self {
-        Self {
-            voxels: [PackedVoxelMaterial::new([0.3, 0.6, 0.8], [0.0, 1.0, 0.0]); BRICK_VOLUME],
+    fn append(&mut self, chunk_palette: BrickPalette) -> u32 {
+        let aligned_size = chunk_palette.next_pow_2_size();
+        let new_index = self.voxels.len() as u32;
+        self.voxels.resize(
+            self.voxels.len() + aligned_size as usize,
+            PackedVoxelMaterial::new([0.0; 3], [0.0; 3]),
+        );
+        for i in 0..chunk_palette.data.len() {
+            self.voxels[new_index as usize + i] = chunk_palette.data[i];
         }
+
+        new_index
     }
 
-    pub fn set_free_index(&mut self, free: u32) {
-        self.voxels[0].set_free_index(free);
-    }
-
-    pub fn get_next_free_index(&self) -> u32 {
-        self.voxels[0].material as u32
+    pub fn get(&self, index: u32, size: u32) -> &[PackedVoxelMaterial] {
+        let index = index as usize;
+        &self.voxels[index..(index + size as usize)]
     }
 }
 
@@ -444,7 +550,7 @@ impl BrickMaterialData {
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct PackedVoxelMaterial {
-    material: u64,
+    material: u32,
 }
 
 impl PackedVoxelMaterial {
@@ -455,20 +561,7 @@ impl PackedVoxelMaterial {
             (albedo[2] * 255.0) as u8,
         ];
 
-        let normals = [
-            (normals[0] * 2047.0 + 2047.0) as u16 & 0x0FFF,
-            (normals[1] * 2047.0 + 2047.0) as u16 & 0x0FFF,
-            (normals[2] * 2047.0 + 2047.0) as u16 & 0x0FFF,
-        ];
-
-        let albedo = (albedo[0] as u64) << 16 | (albedo[1] as u64) << 8 | albedo[2] as u64;
-        let normals = (normals[0] as u64) << 24 | (normals[1] as u64) << 12 | normals[2] as u64;
-        Self {
-            material: albedo << 36 | normals,
-        }
-    }
-
-    pub fn set_free_index(&mut self, free: u32) {
-        self.material = free as u64;
+        let albedo = (albedo[0] as u32) << 16 | (albedo[1] as u32) << 8 | albedo[2] as u32;
+        Self { material: albedo }
     }
 }
