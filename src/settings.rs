@@ -55,8 +55,8 @@ impl Default for Settings {
             chunk_loaded_distance: ChunkRadius::new(32),
             chunk_generation_distance: ChunkRadius::new(3),
 
-            brick_data_max_size: 100000,
-            brick_palette_max_size: 100000,
+            brick_data_max_size: 500000,
+            brick_palette_max_size: 500000,
             brick_request_max_size: 64,
             brick_load_max_size: 128,
 

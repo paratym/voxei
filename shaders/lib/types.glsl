@@ -58,6 +58,10 @@ DECL_BUFFER(4) BrickPaletteList {
   uint32_t voxels[];
 };
 
+DECL_BUFFER_VOLATILE(4) BrickPaletteListVolatile {
+  uint32_t voxels[];
+};
+
 DECL_BUFFER(4) BrickPaletteIndicesList {
   uint8_t indices[];
 };
@@ -74,6 +78,7 @@ DECL_BUFFER_COHERENT(4) BrickRequestList {
 DECL_BUFFER(16) VoxelWorldInfo {
   i32vec3 chunk_center;
   u32vec3 chunk_translation;
+  ResourceId super_chunk_occupancy_grid_buffer;
   ResourceId chunk_occupancy_grid_buffer;
   ResourceId brick_indices_grid_buffer;
   ResourceId brick_data_buffer;

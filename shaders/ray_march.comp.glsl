@@ -27,7 +27,7 @@ TraceWorldOut trace_world_out_hit(vec3 color) {
 const float EPSILON = 0.000001;
 
 TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info) {
-  if(data_index >= 100000) {
+  if(data_index >= 500000) {
     return trace_world_out_hit(vec3(0.6, 0.1, 0.1));
   }
 

@@ -94,3 +94,17 @@ uint32_t morton_compact_by_1(uint32_t x) {
 u32vec2 morton_decode_2(uint32_t morton) {
   return u32vec2(morton_compact_by_1(morton), morton_compact_by_1(morton >> 1));
 }
+
+uint32_t morton_compact_by_2(uint32_t x) {
+  uint32_t y = x & 0x09249249; //      00001001001001001001001001001001
+  y = (y | (y >> 2)) & 0x030c30c3; //  00000011000011000011000011000011
+  y = (y | (y >> 4)) & 0x0300f00f; //  00000011000000001111000000001111
+  y = (y | (y >> 8)) & 0x030000ff; //  00000011000000000000000011111111
+  y = (y | (y >> 16)) & 0x000003ff; // 00000000000000000000001111111111
+  return y;
+}
+
+u32vec3 morton_decode_3(uint32_t morton) {
+  return u32vec3(morton_compact_by_2(morton), morton_compact_by_2(morton >> 1), morton_compact_by_2(morton >> 2));
+}
+

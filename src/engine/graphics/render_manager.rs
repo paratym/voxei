@@ -93,6 +93,12 @@ impl RenderManager {
         {
             return;
         }
+        if pipeline_manager
+            .get_compute_pipeline(voxel_pipeline.normal_calc_pipeline())
+            .is_none()
+        {
+            return;
+        }
 
         let Some(primary_camera_buffer_id) = ecs_world
             .query::<&Camera>()

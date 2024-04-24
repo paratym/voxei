@@ -12,7 +12,7 @@ use super::{
 /// Our voxel world representation for rendering and is more easily editable due to the flat array
 /// structure for each brick and masks for each hierarchy level.
 pub struct DynVoxelWorld {
-    super_chunk_grid_mask: GridMask,
+    super_chunk_grid_mask: BitGridMask,
     chunk_occupancy_mask: GridMask,
     chunk_bit_mask: BitGridMask,
     brick_indices_grid: BrickIndexGrid,
@@ -37,7 +37,7 @@ impl DynVoxelWorld {
         println!("Brick render volume: {}", brick_render_volume);
 
         Self {
-            super_chunk_grid_mask: GridMask::new(super_chunk_render_volume as usize),
+            super_chunk_grid_mask: BitGridMask::new(super_chunk_render_volume as usize),
             chunk_occupancy_mask: GridMask::new(chunk_render_volume as usize),
             chunk_bit_mask: BitGridMask::new(chunk_render_volume as usize),
             brick_indices_grid: BrickIndexGrid::new(brick_render_volume as usize),
@@ -180,6 +180,10 @@ impl DynVoxelWorld {
 
     pub fn collect_brick_changes(&mut self) -> Vec<BrickChange> {
         std::mem::replace(&mut self.brick_changes, Vec::new())
+    }
+
+    pub fn super_chunk_bit_grid(&self) -> &BitGridMask {
+        &self.super_chunk_grid_mask
     }
 
     pub fn chunk_occupancy_grid(&self) -> &GridMask {

@@ -37,13 +37,14 @@ use crate::{
             },
             util::Morton,
             vox_constants::BRICK_VOLUME,
-            vox_world::VoxelWorld,
+            vox_world::{DynBrickPos, VoxelWorld},
         },
     },
     settings::Settings,
 };
 
 const RAY_MARCH_PATH: &str = "shaders/ray_march.comp.glsl";
+const NORMAL_CALC_PATH: &str = "shaders/normal_calc.comp.glsl";
 
 #[repr(C)]
 struct WorldInfo {
@@ -51,6 +52,7 @@ struct WorldInfo {
     _padding0: u32,
     dyn_chunk_translation: Vector3<u32>,
 
+    super_chunk_bit_mask_buffer: PackedGpuResourceId,
     chunk_occupancy_mask_buffer: PackedGpuResourceId,
     brick_indices_grid_buffer: PackedGpuResourceId,
     brick_data_buffer: PackedGpuResourceId,
@@ -72,6 +74,11 @@ pub struct RayMarchPushConstants {
     //     voxel_data: PackedGpuResourceId,
 }
 
+pub struct NormalCalcPushConstants {
+    vox_world_buffer: PackedGpuResourceId,
+    to_process_bricks_buffer: PackedGpuResourceId,
+}
+
 pub type BrickRequest = Morton;
 
 impl RayMarchPushConstants {
@@ -91,13 +98,18 @@ impl RayMarchPushConstants {
 #[derive(Resource)]
 pub struct VoxelPipeline {
     ray_march_pipeline: PipelineId,
+    normal_calc_pipeline: PipelineId,
 
     voxel_world_info_buffer: BufferId,
+    super_chunk_occupancy_grid_buffer: BufferId,
     chunk_occupancy_grid_buffer: BufferId,
     brick_indices_grid_buffer: BufferId,
     brick_data_buffer: BufferId,
     brick_palette_data_buffer: BufferId,
     brick_palette_indices_buffer: BufferId,
+
+    brick_normal_process_list_buffer: BufferId,
+    current_frame_brick_process_count: u32,
 
     brick_request_staging_buffers: Vec<BufferId>,
     brick_request_list_buffer: BufferId,
@@ -116,6 +128,8 @@ impl VoxelPipeline {
     ) -> Self {
         let voxel_world_info_buffer =
             create_device_buffer_typed::<WorldInfo>(device, "voxel_world_info_buffer");
+        let super_chunk_occupancy_grid_buffer =
+            Self::create_super_chunk_occupancy_grid_buffer(device, vox_world.dyn_world());
         let chunk_occupancy_grid_buffer =
             Self::create_chunk_occupancy_grid_buffer(device, vox_world.dyn_world());
         let brick_indices_grid_buffer =
@@ -129,6 +143,8 @@ impl VoxelPipeline {
             .map(|i| Self::create_brick_request_list_staging_buffer(device, settings, i as u32))
             .collect();
         let brick_request_list_buffer = Self::create_brick_request_list_buffer(device, settings);
+        let brick_normal_process_list_buffer =
+            Self::create_brick_normal_process_list_buffer(device, settings);
 
         Self {
             ray_march_pipeline: pipeline_manager.create_compute_pipeline::<RayMarchPushConstants>(
@@ -136,13 +152,22 @@ impl VoxelPipeline {
                 watched_shaders,
                 RAY_MARCH_PATH.to_owned(),
             ),
+            normal_calc_pipeline: pipeline_manager
+                .create_compute_pipeline::<NormalCalcPushConstants>(
+                    assets,
+                    watched_shaders,
+                    NORMAL_CALC_PATH.to_owned(),
+                ),
 
             voxel_world_info_buffer,
+            super_chunk_occupancy_grid_buffer,
             chunk_occupancy_grid_buffer,
             brick_indices_grid_buffer,
             brick_data_buffer,
             brick_palette_data_buffer,
             brick_palette_indices_buffer,
+            brick_normal_process_list_buffer,
+            current_frame_brick_process_count: 0,
 
             brick_request_staging_buffers,
             brick_request_list_buffer,
@@ -178,6 +203,7 @@ impl VoxelPipeline {
             |ptr: *mut WorldInfo| unsafe {
                 ptr.write(WorldInfo {
                     chunk_center: vox_world.chunk_center().vector,
+                    super_chunk_bit_mask_buffer: self.super_chunk_occupancy_grid_buffer.pack(),
                     chunk_occupancy_mask_buffer: self.chunk_occupancy_grid_buffer.pack(),
                     brick_indices_grid_buffer: self.brick_indices_grid_buffer.pack(),
                     brick_data_buffer: self.brick_data_buffer.pack(),
@@ -201,6 +227,16 @@ impl VoxelPipeline {
         );
 
         // Upload entire chunk occupancy buffer.
+        stage_buffer_copy(
+            device,
+            command_recorder,
+            self.super_chunk_occupancy_grid_buffer,
+            AccessFlags::SHADER_READ,
+            |ptr: *mut u8| unsafe {
+                let grid_slice = vox_world.dyn_world().super_chunk_bit_grid().as_slice();
+                ptr.copy_from_nonoverlapping(grid_slice.as_ptr(), grid_slice.len());
+            },
+        );
         stage_buffer_copy(
             device,
             command_recorder,
@@ -266,6 +302,7 @@ impl VoxelPipeline {
             let mut brick_data_copies = Vec::new();
             let mut brick_palette_copies = Vec::new();
             let mut brick_palette_indices_copies = Vec::new();
+            let mut brick_normal_update = Vec::new();
             let time = Instant::now();
             for brick_update in self.queued_brick_updates.drain(
                 (self.queued_brick_updates.len() as isize - brick_change_upload_size as isize)
@@ -293,6 +330,7 @@ impl VoxelPipeline {
                 }
 
                 if brick_index.status() == SpatialStatus::Loaded {
+                    brick_normal_update.push(brick_morton as u32);
                     // Set brick data element
                     let brick_index = brick_index.index();
                     if brick_index >= settings.brick_data_max_size {
@@ -358,6 +396,22 @@ impl VoxelPipeline {
                 }
             }
 
+            if !brick_normal_update.is_empty() {
+                self.current_frame_brick_process_count = brick_normal_update.len() as u32;
+                stage_buffer_copy(
+                    device,
+                    command_recorder,
+                    self.brick_normal_process_list_buffer,
+                    AccessFlags::SHADER_READ,
+                    |ptr: *mut u32| unsafe {
+                        ptr.copy_from_nonoverlapping(
+                            brick_normal_update.as_ptr(),
+                            brick_normal_update.len(),
+                        );
+                    },
+                )
+            }
+
             // println!("Time to copy bricks: {:?}", time.elapsed());
             command_recorder.copy_buffer_to_buffer_multiple(
                 device,
@@ -399,7 +453,7 @@ impl VoxelPipeline {
     }
 
     pub fn record_ray_march_commands(
-        &self,
+        &mut self,
         device: &mut Device,
         command_recorder: &mut CommandRecorder,
         pipeline_manager: &PipelineManager,
@@ -420,6 +474,33 @@ impl VoxelPipeline {
                 dst_access: AccessFlags::SHADER_WRITE,
             },
         );
+
+        if self.current_frame_brick_process_count > 0 {
+            let pipeline = pipeline_manager
+                .get_compute_pipeline(self.normal_calc_pipeline)
+                .unwrap();
+
+            command_recorder.bind_compute_pipeline(&device, pipeline);
+            command_recorder.upload_push_constants(
+                &device,
+                pipeline,
+                &NormalCalcPushConstants {
+                    vox_world_buffer: self.voxel_world_info_buffer.pack(),
+                    to_process_bricks_buffer: self.brick_normal_process_list_buffer.pack(),
+                },
+            );
+            command_recorder.dispatch(&device, self.current_frame_brick_process_count, 1, 1);
+
+            command_recorder.pipeline_barrier_buffer_transition(
+                device,
+                BufferTransition {
+                    buffer: self.brick_palette_data_buffer,
+                    src_access: AccessFlags::SHADER_WRITE | AccessFlags::SHADER_READ,
+                    dst_access: AccessFlags::SHADER_READ,
+                },
+            );
+            self.current_frame_brick_process_count = 0;
+        }
 
         let pipeline = pipeline_manager
             .get_compute_pipeline(self.ray_march_pipeline)
@@ -464,6 +545,10 @@ impl VoxelPipeline {
         self.ray_march_pipeline
     }
 
+    pub fn normal_calc_pipeline(&self) -> PipelineId {
+        self.normal_calc_pipeline
+    }
+
     pub fn compile_brick_requests(
         &self,
         device: &Device,
@@ -482,6 +567,17 @@ impl VoxelPipeline {
         for j in 0..size {
             compiled_brick_requests.insert(unsafe { ptr.add(j as usize).read() });
         }
+    }
+
+    fn create_super_chunk_occupancy_grid_buffer(
+        device: &mut Device,
+        vox_world: &DynVoxelWorld,
+    ) -> BufferId {
+        create_device_buffer(
+            device,
+            "super_chunk_occupancy_grid_buffer",
+            vox_world.super_chunk_bit_grid().buffer_size() as u64,
+        )
     }
 
     fn create_chunk_occupancy_grid_buffer(
@@ -542,6 +638,17 @@ impl VoxelPipeline {
                 | BufferUsageFlags::TRANSFER_DST
                 | BufferUsageFlags::TRANSFER_SRC,
         })
+    }
+
+    fn create_brick_normal_process_list_buffer(
+        device: &mut Device,
+        settings: &Settings,
+    ) -> BufferId {
+        create_device_buffer(
+            device,
+            "brick_normal_process_list_buffer",
+            std::mem::size_of::<u32>() as u64 * settings.brick_load_max_size as u64,
+        )
     }
 
     fn create_brick_request_list_staging_buffer(
