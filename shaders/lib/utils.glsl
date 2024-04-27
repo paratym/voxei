@@ -90,7 +90,7 @@ vec3 i_octahedral_32( uint data, uint sh) {
 VoxelMaterial unpack_voxel(uint32_t voxel) {
   uint32_t albedo_u = voxel & 0xffffff;
   uint32_t octa_norm = (voxel >> 24) & 0x3f;
-  vec3 norm = i_octahedral_32(octa_norm, 3);
+  vec3 norm = i_octahedral_32(octa_norm, 4);
   vec3 albedo = vec3(float((albedo_u >> 16) & 0xff), float((albedo_u >> 8) & 0xff), float(albedo_u & 0xff)) / 255.0;
   return VoxelMaterial(albedo, norm);
 }

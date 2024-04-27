@@ -13,7 +13,7 @@ DECL_PUSH_CONSTANTS {
   ResourceId to_process_bricks;
 } push_constants;
 
-const int CHECK_LENGTH = 5;
+const int CHECK_LENGTH = 3;
 const float CHECK_LENGTH_DIST = length(vec3(CHECK_LENGTH, CHECK_LENGTH, CHECK_LENGTH));
 
 bool check_voxel_occupancy(i32vec3 i_voxel_position, in VoxelWorldInfo info, in BrickIndicesGrid brick_indices_grid, in BrickDataList brick_data_list) {
@@ -102,7 +102,8 @@ void main() {
   }
 
   // Write voxel_normal 
-  uint32_t octa_norm = octahedral_32(normalize(normal), 3);
+  uint32_t octa_norm = octahedral_32(normalize(normal), 4);
+  uint32_t albedo = (uint32_t(normal.x * 128 + 127) << 16) | (uint32_t(normal.y * 128 + 127) << 8)| uint32_t(normal.z * 128 + 127);
   uint32_t pv = palette_list.voxels[palette_index + voxel_index];
-  palette_list.voxels[palette_index + voxel_index] = (octa_norm << 24) | (pv & 0xFFFFFF);
+  palette_list.voxels[palette_index + voxel_index] = (octa_norm << 24) | (albedo & 0xFFFFFF);
 }
