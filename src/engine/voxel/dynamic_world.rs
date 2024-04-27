@@ -15,11 +15,13 @@ pub struct DynVoxelWorld {
     super_chunk_grid_mask: BitGridMask,
     chunk_occupancy_mask: GridMask,
     chunk_bit_mask: BitGridMask,
+    chunk_normal_grid: BitGridMask,
     brick_indices_grid: BrickIndexGrid,
     brick_data: BrickDataList,
     brick_palette_data: BrickPaletteList,
 
     brick_changes: Vec<BrickChange>,
+    brick_normal_updates: Vec<BrickChange>,
 
     chunk_render_distance: ChunkRadius,
 
@@ -33,6 +35,7 @@ impl DynVoxelWorld {
         println!("Chunk render volume: {}", chunk_render_volume);
         let super_chunk_render_volume =
             (chunk_render_volume as f32 / SUPER_CHUNK_VOLUME as f32).ceil() as u64;
+        println!("Super chunk render volume: {}", super_chunk_render_volume);
         let brick_render_volume = chunk_render_volume * BRICK_VOLUME as u64;
         println!("Brick render volume: {}", brick_render_volume);
 
@@ -40,11 +43,13 @@ impl DynVoxelWorld {
             super_chunk_grid_mask: BitGridMask::new(super_chunk_render_volume as usize),
             chunk_occupancy_mask: GridMask::new(chunk_render_volume as usize),
             chunk_bit_mask: BitGridMask::new(chunk_render_volume as usize),
+            chunk_normal_grid: BitGridMask::new(chunk_render_volume as usize),
             brick_indices_grid: BrickIndexGrid::new(brick_render_volume as usize),
             brick_data: BrickDataList::new(),
             brick_palette_data: BrickPaletteList::new(),
 
             brick_changes: Vec::new(),
+            brick_normal_updates: Vec::new(),
 
             chunk_render_distance: settings.chunk_render_distance,
             chunk_translation: Vector3::zeros(),
@@ -109,6 +114,7 @@ impl DynVoxelWorld {
         self.chunk_occupancy_mask
             .set_status(morton, SpatialStatus::Unloaded);
         self.chunk_bit_mask.set_status(morton, false);
+        self.chunk_normal_grid.set_status(morton, false);
     }
 
     pub fn chunk_status(&self, local_chunk_pos: DynChunkPos) -> SpatialStatus {
@@ -158,10 +164,10 @@ impl DynVoxelWorld {
     pub fn set_brick(&mut self, morton: u64, brick: Option<(BrickData, BrickPalette)>) {
         let brick_index = if let Some((mut brick_data, mut brick_material_data)) = brick {
             let size_i = match brick_material_data.next_pow_2_size() {
-                32 => 0,
-                64 => 1,
-                128 => 2,
-                256 => 3,
+                64 => 0,
+                128 => 1,
+                256 => 2,
+                512 => 3,
                 _ => unreachable!(),
             };
             let indices = brick_material_data.indices.take();
@@ -178,8 +184,33 @@ impl DynVoxelWorld {
         self.brick_indices_grid.0[morton as usize] = brick_index;
     }
 
+    pub fn update_chunk_normals(&mut self, local_chunk_pos: DynChunkPos) {
+        let morton = local_chunk_pos.morton();
+        if self.chunk_occupancy_mask.status(morton) != SpatialStatus::Loaded {
+            return;
+        }
+
+        self.chunk_normal_grid.set_status(morton, true);
+        let local_brick_min = local_chunk_pos.to_dyn_brick_pos();
+        let local_brick_min_morton = *local_brick_min.morton();
+        for brick_morton in 0..CHUNK_VOLUME {
+            let dyn_brick_morton = local_brick_min_morton + brick_morton as u64;
+            if self.brick_indices_grid.0[dyn_brick_morton as usize].status()
+                == SpatialStatus::Loaded
+            {
+                self.brick_normal_updates.push(BrickChange {
+                    brick_morton: Morton::new(dyn_brick_morton),
+                });
+            }
+        }
+    }
+
     pub fn collect_brick_changes(&mut self) -> Vec<BrickChange> {
         std::mem::replace(&mut self.brick_changes, Vec::new())
+    }
+
+    pub fn collect_brick_normal_updates(&mut self) -> Vec<BrickChange> {
+        std::mem::replace(&mut self.brick_normal_updates, Vec::new())
     }
 
     pub fn super_chunk_bit_grid(&self) -> &BitGridMask {
@@ -303,7 +334,7 @@ pub struct BitGridMask(Vec<u8>);
 
 impl BitGridMask {
     pub fn new(volume: usize) -> Self {
-        Self(vec![0; volume / 8])
+        Self(vec![0; (volume as f32 / 8.0).ceil() as usize])
     }
 
     pub fn set_status(&mut self, morton: Morton, status: bool) {
@@ -458,10 +489,10 @@ impl BrickData {
     pub fn palette_size(&self) -> u32 {
         let size_bits = self.palette_index >> 30;
         match size_bits {
-            0 => 32,
-            1 => 64,
-            2 => 128,
-            3 => 256,
+            0 => 64,
+            1 => 128,
+            2 => 256,
+            3 => 512,
             _ => unreachable!(),
         }
     }
@@ -478,8 +509,8 @@ pub struct BrickPalette {
 
 impl BrickPalette {
     pub fn new(data: Vec<PackedVoxelMaterial>, indices: [u8; BRICK_VOLUME]) -> Self {
-        if data.len() > 256 {
-            panic!("Brick palette can only have a maximum of 256 entries");
+        if data.len() > 512 {
+            panic!("Brick palette can only have a maximum of 512 entries");
         }
         Self {
             data,
@@ -497,7 +528,7 @@ impl BrickPalette {
                     [voxel.x, voxel.y, voxel.z],
                     [0.0; 3],
                 ));
-                indices[i] = data.len() as u8 - 1;
+                indices[i] = (data.len() - 1) as u8;
             }
         }
 
@@ -505,7 +536,7 @@ impl BrickPalette {
     }
 
     pub fn next_pow_2_size(&self) -> u32 {
-        next_pow2(self.data.len() as u32).max(32)
+        next_pow2(self.data.len() as u32).max(64)
     }
 }
 

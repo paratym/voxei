@@ -122,9 +122,9 @@ impl VoxelWorld {
                 dyn_load_queue.push(world_pos);
             }
         };
-        for x in dyn_chunk_min.x..dyn_chunk_max.x {
-            for y in dyn_chunk_min.y..dyn_chunk_max.y {
-                for z in dyn_chunk_min.z..dyn_chunk_max.z {
+        for x in dyn_chunk_min.x..=dyn_chunk_max.x {
+            for y in dyn_chunk_min.y..=dyn_chunk_max.y {
+                for z in dyn_chunk_min.z..=dyn_chunk_max.z {
                     voxel_fn(x, y, z);
                 }
             }
@@ -195,6 +195,24 @@ impl VoxelWorld {
                 .chunk_generator
                 .update_bounds(chunk_center, chunk_render_distance);
         }
+
+        if input.is_key_pressed(Key::T) {
+            const NORM_RANGE: i32 = 4;
+            for x in -NORM_RANGE..=NORM_RANGE {
+                for y in -NORM_RANGE..=NORM_RANGE {
+                    for z in -NORM_RANGE..=NORM_RANGE {
+                        let chunk_center = WorldChunkPos::new(
+                            vox_world.chunk_center.vector.x + x,
+                            vox_world.chunk_center.vector.y + y,
+                            vox_world.chunk_center.vector.z + z,
+                        );
+
+                        let dyn_pos = chunk_center.to_dyn_pos(&vox_world).unwrap();
+                        vox_world.dyn_world_mut().update_chunk_normals(dyn_pos);
+                    }
+                }
+            }
+        }
     }
 
     pub fn dyn_world(&self) -> &DynVoxelWorld {
@@ -220,7 +238,7 @@ impl ChunkRadius {
     pub fn new(radius: u32) -> Self {
         Self {
             radius,
-            pow2_side_length: next_pow2(radius * 2),
+            pow2_side_length: next_pow2(radius * 2 + 1),
         }
     }
 

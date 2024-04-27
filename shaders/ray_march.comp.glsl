@@ -25,8 +25,10 @@ TraceWorldOut trace_world_out_hit(vec3 color) {
 }
 
 const float EPSILON = 0.000001;
+const vec3 LIGHT_DIR = normalize(vec3(0,-1,0));
+const vec3 LIGHT_POS = vec3(0, 100, 0);
 
-TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info) {
+TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info, vec3 brick_world_pos) {
   if(data_index >= 500000) {
     return trace_world_out_hit(vec3(0.6, 0.1, 0.1));
   }
@@ -53,7 +55,13 @@ TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWor
       uint32_t voxel_index = brick_palette_indices_list.indices[data_index * BRICK_VOLUME + voxel_morton];
       uint32_t packed_voxel = brick_palette_list.voxels[palette_index + voxel_index];
       VoxelMaterial mat = unpack_voxel(packed_voxel);
-      return trace_world_out_hit(mat.albedo);
+
+      vec3 voxel_world_pos = brick_world_pos + vec3(map_pos) * VOXEL_WORLD_LENGTH;
+      vec3 to_light = normalize(LIGHT_POS - voxel_world_pos);
+      float to_light_dist = length(to_light);
+      float atten = 1.0 / (to_light_dist * to_light_dist);
+      float diff = max(dot(mat.normal, to_light), 0.0) * atten;
+      return trace_world_out_hit(mat.albedo * max(diff,0.05));
     }
 
     bvec3 mask = lessThanEqual(curr_t.xyz, min(curr_t.yzx, curr_t.zxy));
@@ -65,7 +73,7 @@ TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWor
   return trace_world_out_miss();
 }
 
-TraceWorldOut trace_chunk(Ray ray, i32vec3 chunk_local, u32vec3 chunk_translated_local, vec3 normal, in VoxelWorldInfo info) { 
+TraceWorldOut trace_chunk(Ray ray, i32vec3 chunk_local, u32vec3 chunk_translated_local, vec3 normal, in VoxelWorldInfo info, vec3 dyn_world_min) { 
   BrickIndicesGrid brick_grid = get_buffer(info.brick_indices_grid_buffer, BrickIndicesGrid);
 
   i32vec3 map_pos = i32vec3(floor(ray.origin));
@@ -90,7 +98,9 @@ TraceWorldOut trace_chunk(Ray ray, i32vec3 chunk_local, u32vec3 chunk_translated
 
       vec3 brick_enter_pos = ray.origin + ray.dir * (min(min(last_t.x, last_t.y), last_t.z));
       Ray brick_local_ray = Ray((clamp(brick_enter_pos - map_pos, EPSILON, 1.0 - EPSILON)) * BRICK_LENGTH, ray.dir, ray.inv_dir);
-      TraceWorldOut brick_result = trace_brick(brick_local_ray, data_index, normal, info);
+      vec3 chunk_world_pos = dyn_world_min + vec3(chunk_local) * CHUNK_WORLD_LENGTH;
+      vec3 brick_world_pos = chunk_world_pos + vec3(map_pos) * BRICK_WORLD_LENGTH;
+      TraceWorldOut brick_result = trace_brick(brick_local_ray, data_index, normal, info, brick_world_pos);
       if(brick_result.hit) {
         return brick_result;
       }
@@ -143,7 +153,7 @@ TraceWorldOut trace_vox_world(Ray ray) {
       vec3 chunk_enter_pos = ray.origin + ray.dir * (min(min(last_t.x, last_t.y), last_t.z));
       Ray brick_local_ray = Ray((clamp(chunk_enter_pos - map_pos, EPSILON, 1.0 - EPSILON)) * CHUNK_LENGTH, ray.dir, ray.inv_dir);
       vec3 normal = vec3(lessThanEqual(last_t.xyz, min(last_t.yzx, last_t.zxy))) * -step_axes;
-      TraceWorldOut chunk_result = trace_chunk(brick_local_ray, map_pos, translated_map_pos, normal, info);
+      TraceWorldOut chunk_result = trace_chunk(brick_local_ray, map_pos, translated_map_pos, normal, info, dyn_world_aabb.min);
       if(chunk_result.hit) {
         return chunk_result;
       }

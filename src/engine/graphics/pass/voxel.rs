@@ -115,6 +115,7 @@ pub struct VoxelPipeline {
     brick_request_list_buffer: BufferId,
 
     queued_brick_updates: VecDeque<BrickChange>,
+    queued_brick_normal_updates: VecDeque<BrickChange>,
 }
 
 impl VoxelPipeline {
@@ -173,6 +174,7 @@ impl VoxelPipeline {
             brick_request_list_buffer,
 
             queued_brick_updates: VecDeque::new(),
+            queued_brick_normal_updates: VecDeque::new(),
         }
     }
 
@@ -183,6 +185,9 @@ impl VoxelPipeline {
         vox_pipeline
             .queued_brick_updates
             .extend(vox_world.dyn_world_mut().collect_brick_changes());
+        vox_pipeline
+            .queued_brick_normal_updates
+            .extend(vox_world.dyn_world_mut().collect_brick_normal_updates());
     }
 
     pub fn record_copy_commands(
@@ -302,7 +307,6 @@ impl VoxelPipeline {
             let mut brick_data_copies = Vec::new();
             let mut brick_palette_copies = Vec::new();
             let mut brick_palette_indices_copies = Vec::new();
-            let mut brick_normal_update = Vec::new();
             let time = Instant::now();
             for brick_update in self.queued_brick_updates.drain(
                 (self.queued_brick_updates.len() as isize - brick_change_upload_size as isize)
@@ -330,7 +334,6 @@ impl VoxelPipeline {
                 }
 
                 if brick_index.status() == SpatialStatus::Loaded {
-                    brick_normal_update.push(brick_morton as u32);
                     // Set brick data element
                     let brick_index = brick_index.index();
                     if brick_index >= settings.brick_data_max_size {
@@ -396,22 +399,6 @@ impl VoxelPipeline {
                 }
             }
 
-            if !brick_normal_update.is_empty() {
-                self.current_frame_brick_process_count = brick_normal_update.len() as u32;
-                stage_buffer_copy(
-                    device,
-                    command_recorder,
-                    self.brick_normal_process_list_buffer,
-                    AccessFlags::SHADER_READ,
-                    |ptr: *mut u32| unsafe {
-                        ptr.copy_from_nonoverlapping(
-                            brick_normal_update.as_ptr(),
-                            brick_normal_update.len(),
-                        );
-                    },
-                )
-            }
-
             // println!("Time to copy bricks: {:?}", time.elapsed());
             command_recorder.copy_buffer_to_buffer_multiple(
                 device,
@@ -440,6 +427,41 @@ impl VoxelPipeline {
                 );
             }
             // println!("Time to upload bricks: {:?}", time.elapsed());
+        }
+
+        let brick_normal_update_size =
+            self.queued_brick_normal_updates
+                .len()
+                .min(settings.brick_load_max_size as usize) as u64;
+        if brick_normal_update_size > 0 {
+            let mut brick_normal_updates = Vec::new();
+            for brick_normal_update in self.queued_brick_normal_updates.drain(
+                (self.queued_brick_normal_updates.len() as isize
+                    - brick_normal_update_size as isize)
+                    .max(0) as usize..,
+            ) {
+                let brick_index = vox_world.dyn_world().brick_indices_grid().as_slice()
+                    [*brick_normal_update.brick_morton as usize];
+                if brick_index.status() == SpatialStatus::Loaded {
+                    brick_normal_updates.push(*brick_normal_update.brick_morton as u32);
+                }
+            }
+
+            if !brick_normal_updates.is_empty() {
+                self.current_frame_brick_process_count = brick_normal_updates.len() as u32;
+                stage_buffer_copy(
+                    device,
+                    command_recorder,
+                    self.brick_normal_process_list_buffer,
+                    AccessFlags::SHADER_READ,
+                    |ptr: *mut u32| unsafe {
+                        ptr.copy_from_nonoverlapping(
+                            brick_normal_updates.as_ptr(),
+                            brick_normal_updates.len(),
+                        );
+                    },
+                )
+            }
         }
 
         // Reset request list ptr.

@@ -50,10 +50,10 @@ impl Default for Settings {
             camera_fov: consts::FRAC_PI_2,
             mouse_sensitivity: 0.05,
 
-            chunk_render_distance: ChunkRadius::new(10),
-            chunk_dyn_loaded_distance: ChunkRadius::new(5),
+            chunk_render_distance: ChunkRadius::new(14),
+            chunk_dyn_loaded_distance: ChunkRadius::new(1),
             chunk_loaded_distance: ChunkRadius::new(32),
-            chunk_generation_distance: ChunkRadius::new(3),
+            chunk_generation_distance: ChunkRadius::new(4),
 
             brick_data_max_size: 500000,
             brick_palette_max_size: 500000,

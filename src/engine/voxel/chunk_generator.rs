@@ -164,8 +164,10 @@ impl ChunkGenerator {
                                 + (world_vox_pos.z as f32 / 16.0).sin())
                             .cos()
                                 * 15.0;
+                        let mut height = (world_vox_pos.x as f32 / 64.0).sin() * 40.0;
+                        height += (world_vox_pos.z as f32 / 30.0).cos() * 30.0;
                         let diff = height - world_vox_pos.y as f32;
-                        if diff <= 3.0 && diff >= 0.0 {
+                        if diff >= 1.0 && diff <= 8.0 {
                             let morton = Morton::encode(Vector3::new(x as u32, y as u32, z as u32));
                             let random_y = rand::random::<f32>() * 0.1;
                             let random_x = rand::random::<f32>() * 0.075;
