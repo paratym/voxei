@@ -174,6 +174,9 @@ impl DynVoxelWorld {
             let material_index = self.brick_palette_data.insert(brick_material_data);
             brick_data.palette_index = material_index | (size_i << 30);
             let index = self.brick_data.insert(brick_data, *indices.unwrap());
+            if index == 1347 {
+                println!("palette index: {}", material_index);
+            }
             BrickIndex::new_loaded(index)
         } else {
             BrickIndex::new_loaded_empty()
@@ -185,6 +188,9 @@ impl DynVoxelWorld {
     }
 
     pub fn update_chunk_normals(&mut self, local_chunk_pos: DynChunkPos) {
+        // self.brick_normal_updates.push(BrickChange {
+        //     brick_morton: Morton::new(14682733),
+        // });
         let morton = local_chunk_pos.morton();
         if self.chunk_occupancy_mask.status(morton) != SpatialStatus::Loaded {
             return;
@@ -390,7 +396,9 @@ impl BrickIndex {
 pub struct BrickDataList {
     free_head: u32,
     data: Vec<BrickData>,
-    palette_indices: Vec<u8>,
+
+    // Each index is u9
+    palette_indices: Vec<u16>,
 }
 
 const NULL_FREE_INDEX: u32 = 0x7FFFFFFF;
@@ -408,7 +416,7 @@ impl BrickDataList {
     pub fn insert(
         &mut self,
         brick_data: BrickData,
-        brick_palette_indices: [u8; BRICK_VOLUME],
+        brick_palette_indices: [u16; BRICK_VOLUME],
     ) -> u32 {
         if self.free_head != NULL_FREE_INDEX {
             let new_index = self.free_head;
@@ -420,6 +428,9 @@ impl BrickDataList {
 
             return new_index;
         } else {
+            if self.data.len() == 1347 {
+                println!("Brick data indices: {:?}", brick_palette_indices);
+            }
             self.data.push(brick_data);
             self.palette_indices
                 .extend_from_slice(&brick_palette_indices);
@@ -431,7 +442,7 @@ impl BrickDataList {
         &self.data[index as usize]
     }
 
-    pub fn get_indices(&self, index: u32) -> &[u8] {
+    pub fn get_indices(&self, index: u32) -> &[u16] {
         let index = index as usize * BRICK_VOLUME;
         &self.palette_indices[index..(index + BRICK_VOLUME)]
     }
@@ -504,11 +515,11 @@ pub struct BrickChange {
 
 pub struct BrickPalette {
     data: Vec<PackedVoxelMaterial>,
-    indices: Option<Box<[u8; BRICK_VOLUME]>>,
+    indices: Option<Box<[u16; BRICK_VOLUME]>>,
 }
 
 impl BrickPalette {
-    pub fn new(data: Vec<PackedVoxelMaterial>, indices: [u8; BRICK_VOLUME]) -> Self {
+    pub fn new(data: Vec<PackedVoxelMaterial>, indices: [u16; BRICK_VOLUME]) -> Self {
         if data.len() > 512 {
             panic!("Brick palette can only have a maximum of 512 entries");
         }
@@ -520,15 +531,15 @@ impl BrickPalette {
 
     pub fn from_voxel_array(voxel_data: &Vec<Option<Vector3<f32>>>) -> Self {
         let mut data = Vec::new();
-        let mut indices = [0; BRICK_VOLUME];
-        for i in 0..voxel_data.len() {
+        let mut indices = [65535; BRICK_VOLUME];
+        for i in 0..BRICK_VOLUME {
             let voxel = &voxel_data[i];
             if let Some(voxel) = voxel {
                 data.push(PackedVoxelMaterial::new(
                     [voxel.x, voxel.y, voxel.z],
                     [0.0; 3],
                 ));
-                indices[i] = (data.len() - 1) as u8;
+                indices[i] = (data.len() - 1) as u16;
             }
         }
 
@@ -605,7 +616,7 @@ impl BrickPaletteList {
         let new_index = self.voxels.len() as u32;
         self.voxels.resize(
             self.voxels.len() + aligned_size as usize,
-            PackedVoxelMaterial::new([0.0; 3], [0.0; 3]),
+            PackedVoxelMaterial::new([0.0, 1.0, 1.0], [0.0; 3]),
         );
         for i in 0..chunk_palette.data.len() {
             self.voxels[new_index as usize + i] = chunk_palette.data[i];

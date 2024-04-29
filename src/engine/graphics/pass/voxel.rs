@@ -301,7 +301,7 @@ impl VoxelPipeline {
                 device.map_buffer_typed::<PackedVoxelMaterial>(brick_palette_staging_buffer);
             let mut brick_palette_staging_index = 0;
             let brick_palette_indices_staging_ptr =
-                device.map_buffer_typed::<u8>(brick_palette_indices_staging_buffer);
+                device.map_buffer_typed::<u16>(brick_palette_indices_staging_buffer);
 
             let mut brick_indices_copies = Vec::new();
             let mut brick_data_copies = Vec::new();
@@ -353,6 +353,7 @@ impl VoxelPipeline {
                         size: std::mem::size_of::<BrickData>() as u64,
                     });
 
+                    // Set brick palette data
                     let brick_palette_index = brick_data.palette_index();
                     if brick_palette_index >= settings.brick_palette_max_size * 256 {
                         // println!("Brick palette buffer on gpu is too small, can't add new bricks palettes.");
@@ -375,11 +376,11 @@ impl VoxelPipeline {
                         size: std::mem::size_of::<PackedVoxelMaterial>() as u64
                             * brick_palette.len() as u64,
                     });
-
                     brick_palette_staging_index += brick_palette.len() as u64;
                     brick_palette_staging_ptr =
                         unsafe { brick_palette_staging_ptr.add(brick_palette.len() as usize) };
 
+                    // Set brick palette indices
                     let brick_palette_indices =
                         vox_world.dyn_world().brick_data().get_indices(brick_index);
                     let brick_palette_indices_stage_index = brick_data_stage_index * BRICK_VOLUME;
@@ -392,9 +393,9 @@ impl VoxelPipeline {
                             .copy_from(brick_palette_indices.as_ptr(), BRICK_VOLUME)
                     };
                     brick_palette_indices_copies.push(CopyRegion {
-                        src_offset: brick_palette_indices_stage_index as u64,
-                        dst_offset: brick_index as u64 * BRICK_VOLUME as u64,
-                        size: BRICK_VOLUME as u64,
+                        src_offset: brick_palette_indices_stage_index as u64 * 2,
+                        dst_offset: brick_index as u64 * BRICK_VOLUME as u64 * 2,
+                        size: BRICK_VOLUME as u64 * 2,
                     });
                 }
             }
@@ -646,7 +647,7 @@ impl VoxelPipeline {
         create_device_buffer(
             device,
             "brick_palette_indices_buffer",
-            settings.brick_data_max_size as u64 * BRICK_VOLUME as u64,
+            settings.brick_data_max_size as u64 * BRICK_VOLUME as u64 * 2,
         )
     }
 

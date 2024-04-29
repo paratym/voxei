@@ -23,7 +23,7 @@ use crate::{
         },
         input::{keyboard::Key, Input},
         resource::{Res, ResMut},
-        voxel::dynamic_world::SpatialStatus,
+        voxel::{dynamic_world::SpatialStatus, vox_constants::BRICK_WORLD_LENGTH},
     },
     settings::Settings,
 };
@@ -197,7 +197,7 @@ impl VoxelWorld {
         }
 
         if input.is_key_pressed(Key::T) {
-            const NORM_RANGE: i32 = 4;
+            const NORM_RANGE: i32 = 0;
             for x in -NORM_RANGE..=NORM_RANGE {
                 for y in -NORM_RANGE..=NORM_RANGE {
                     for z in -NORM_RANGE..=NORM_RANGE {
@@ -208,7 +208,39 @@ impl VoxelWorld {
                         );
 
                         let dyn_pos = chunk_center.to_dyn_pos(&vox_world).unwrap();
+                        let brick_center = Vector3::new(
+                            ((player_pos.x / BRICK_WORLD_LENGTH).floor() as i32)
+                                .rem_euclid(CHUNK_LENGTH as i32) as u32,
+                            ((player_pos.y / BRICK_WORLD_LENGTH).floor() as i32)
+                                .rem_euclid(CHUNK_LENGTH as i32) as u32,
+                            ((player_pos.z / BRICK_WORLD_LENGTH).floor() as i32)
+                                .rem_euclid(CHUNK_LENGTH as i32) as u32,
+                        );
+                        println!("Chunk: {:?} Brick: {:?}", dyn_pos, brick_center);
+                        let brick_morton =
+                            Morton::encode(dyn_pos.to_dyn_brick_pos().vector + brick_center);
+                        println!(
+                            "Chunk: {:?} Brick: {:?}, morton: {:?}",
+                            dyn_pos, brick_center, brick_morton
+                        );
+                        let brick_data_index = 1347;
+                        println!("brick_data_index: {:?}", brick_data_index);
+                        let brick_data = vox_world.dyn_world().brick_data().get(brick_data_index);
+                        let brick_pallete = vox_world
+                            .dyn_world()
+                            .brick_palette_list()
+                            .get(brick_data.palette_index(), brick_data.palette_size());
+                        println!(
+                            "palette index: {:?}, size: {:?}, data: {:?}",
+                            brick_data.palette_index(),
+                            brick_data.palette_size(),
+                            brick_pallete
+                        );
                         vox_world.dyn_world_mut().update_chunk_normals(dyn_pos);
+                        println!(
+                            "slice: {:?}",
+                            vox_world.dyn_world().brick_data().get_indices(1347)
+                        );
                     }
                 }
             }

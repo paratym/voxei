@@ -16,6 +16,7 @@ use crate::{
         ecs::ecs_world::ECSWorld,
         resource::{Res, ResMut},
         voxel::vox_world::VoxelWorld,
+        window::window::Window,
     },
     game::player::player::PlayerTag,
     settings::Settings,
@@ -74,6 +75,7 @@ impl RenderManager {
         pipeline_manager: Res<PipelineManager>,
         mut device: ResMut<DeviceResource>,
         mut swapchain: ResMut<SwapchainResource>,
+        window: Res<Window>,
         ecs_world: Res<ECSWorld>,
         time: Res<Time>,
         settings: Res<Settings>,
@@ -182,10 +184,13 @@ impl RenderManager {
             signal_timeline_semaphores: vec![(swapchain.gpu_timeline_semaphore(), signal_index)],
         });
 
-        device.present(PresentInfo {
+        let pr = device.present(PresentInfo {
             swapchain: &swapchain,
             wait_semaphores: vec![swapchain.current_present_semaphore()],
         });
+        if let Err(_) = pr {
+            swapchain.resize(&mut device, window.width(), window.height());
+        }
 
         device.collect_garbage(swapchain.gpu_timeline_semaphore());
     }

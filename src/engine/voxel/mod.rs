@@ -11,6 +11,7 @@ pub mod vox_constants {
     pub const BRICK_LENGTH: usize = 8;
     pub const BRICK_AREA: usize = BRICK_LENGTH * BRICK_LENGTH;
     pub const BRICK_VOLUME: usize = BRICK_AREA * BRICK_LENGTH;
+    pub const BRICK_WORLD_LENGTH: f32 = BRICK_LENGTH as f32 * VOXEL_WORLD_LENGTH;
     pub const BRICK_MORTON_LENGTH: u64 = BRICK_LENGTH.trailing_zeros() as u64 * 3;
 
     pub const CHUNK_LENGTH: usize = 8;

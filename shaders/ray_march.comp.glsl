@@ -52,7 +52,8 @@ TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWor
     uint32_t voxel_status = brick_data.voxel_mask[voxel_morton >> 3] & (1 << (voxel_morton & 7));
     if(voxel_status > 0) {
       uint32_t palette_index = brick_data.palette_index & 0x3FFFFFFF;
-      uint32_t voxel_index = brick_palette_indices_list.indices[data_index * BRICK_VOLUME + voxel_morton];
+      uint32_t palette_size = brick_data.palette_index >> 30;
+      uint32_t voxel_index = brick_palette_indices_list.indices[(data_index * BRICK_VOLUME + voxel_morton)];
       uint32_t packed_voxel = brick_palette_list.voxels[palette_index + voxel_index];
       VoxelMaterial mat = unpack_voxel(packed_voxel);
 

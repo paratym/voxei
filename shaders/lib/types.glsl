@@ -63,7 +63,7 @@ DECL_BUFFER_VOLATILE(4) BrickPaletteListVolatile {
 };
 
 DECL_BUFFER(4) BrickPaletteIndicesList {
-  uint8_t indices[];
+  uint16_t indices[];
 };
 
 struct BrickRequest {
