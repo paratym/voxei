@@ -428,9 +428,6 @@ impl BrickDataList {
 
             return new_index;
         } else {
-            if self.data.len() == 1347 {
-                println!("Brick data indices: {:?}", brick_palette_indices);
-            }
             self.data.push(brick_data);
             self.palette_indices
                 .extend_from_slice(&brick_palette_indices);
@@ -531,7 +528,7 @@ impl BrickPalette {
 
     pub fn from_voxel_array(voxel_data: &Vec<Option<Vector3<f32>>>) -> Self {
         let mut data = Vec::new();
-        let mut indices = [65535; BRICK_VOLUME];
+        let mut indices = [0; BRICK_VOLUME];
         for i in 0..BRICK_VOLUME {
             let voxel = &voxel_data[i];
             if let Some(voxel) = voxel {
@@ -631,22 +628,22 @@ impl BrickPaletteList {
     }
 }
 
-/// free bit, 3 bit padding, u8,u8,u8 albedo, i12,i12,i12 normals
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct PackedVoxelMaterial {
+    // 8 bit octahedron normals, 6 bits per channel rgb
     material: u32,
 }
 
 impl PackedVoxelMaterial {
     pub fn new(albedo: [f32; 3], normals: [f32; 3]) -> Self {
         let albedo = [
-            (albedo[0] * 255.0) as u8,
-            (albedo[1] * 255.0) as u8,
-            (albedo[2] * 255.0) as u8,
+            (albedo[0] * 63.0) as u8,
+            (albedo[1] * 63.0) as u8,
+            (albedo[2] * 63.0) as u8,
         ];
 
-        let albedo = (albedo[0] as u32) << 16 | (albedo[1] as u32) << 8 | albedo[2] as u32;
+        let albedo = (albedo[0] as u32) << 12 | (albedo[1] as u32) << 6 | albedo[2] as u32;
         Self { material: albedo }
     }
 }

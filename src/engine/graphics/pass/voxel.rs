@@ -281,7 +281,7 @@ impl VoxelPipeline {
             let brick_palette_indices_staging_buffer = device.create_buffer(BufferInfo {
                 name: format!("brick_palette_indices_staging_buffer_{}", cpu_frame_index)
                     .to_owned(),
-                size: std::mem::size_of::<u8>() as u64
+                size: std::mem::size_of::<u16>() as u64
                     * BRICK_VOLUME as u64
                     * brick_change_upload_size,
                 memory_location: MemoryLocation::CpuToGpu,

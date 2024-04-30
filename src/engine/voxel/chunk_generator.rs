@@ -171,12 +171,8 @@ impl ChunkGenerator {
                             let morton = Morton::encode(Vector3::new(x as u32, y as u32, z as u32));
                             let random_y = rand::random::<f32>() * 0.1;
                             let random_x = rand::random::<f32>() * 0.075;
-                            data[*morton as usize] = Some(Vector3::new(
-                                (x % 8) as f32 / 7.0,
-                                0.0,
-                                0.0, // (y % 8) as f32 / 7.0,
-                                     // (z % 8) as f32 / 7.0,
-                            ));
+                            data[*morton as usize] =
+                                Some(Vector3::new(random_x, 0.8 + random_y, 0.0));
                             is_empty = false;
                         }
                     }

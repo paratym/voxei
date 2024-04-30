@@ -25,8 +25,8 @@ TraceWorldOut trace_world_out_hit(vec3 color) {
 }
 
 const float EPSILON = 0.000001;
-const vec3 LIGHT_DIR = normalize(vec3(0,-1,0));
-const vec3 LIGHT_POS = vec3(0, 100, 0);
+const vec3 LIGHT_DIR = normalize(vec3(0,-1,-1));
+const vec3 LIGHT_POS = vec3(100, 100, 0);
 
 TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info, vec3 brick_world_pos) {
   if(data_index >= 500000) {
@@ -61,8 +61,10 @@ TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWor
       vec3 to_light = normalize(LIGHT_POS - voxel_world_pos);
       float to_light_dist = length(to_light);
       float atten = 1.0 / (to_light_dist * to_light_dist);
-      float diff = max(dot(mat.normal, to_light), 0.0) * atten;
-      return trace_world_out_hit(mat.albedo * max(diff,0.05));
+      // half lambert
+      float dotl = max(dot(mat.normal, -LIGHT_DIR), 0.1);
+      float diff = pow(dotl * 0.5 + 0.5, 5.0);
+      return trace_world_out_hit(mat.albedo * dotl);
     }
 
     bvec3 mask = lessThanEqual(curr_t.xyz, min(curr_t.yzx, curr_t.zxy));

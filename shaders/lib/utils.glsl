@@ -62,21 +62,18 @@
 //   return AABB(voxel_world_min, voxel_world_max);
 // }
 
-uint octahedral_32( in vec3 nor, uint sh) {
-    nor /= ( abs( nor.x ) + abs( nor.y ) + abs( nor.z ) );
+uint octahedral_8_encode(vec3 nor) {
+    nor /= (abs(nor.x) + abs(nor.y) + abs(nor.z));
     nor.xy = (nor.z >= 0.0) ? nor.xy : (1.0-abs(nor.yx))*sign(nor.xy);
     vec2 v = 0.5 + 0.5*nor.xy;
 
-    uint mu = (1u<<sh)-1u;
-    uvec2 d = uvec2(floor(v*float(mu)+0.5));
-    return (d.y<<sh)|d.x;
+    uvec2 d = uvec2(floor(v*15.0+0.5));
+    return (d.y<<4)|d.x;
 }
 
-vec3 i_octahedral_32( uint data, uint sh) {
-    uint mu =(1u<<sh)-1u;
-    
-    uvec2 d = uvec2( data, data>>sh ) & mu;
-    vec2 v = vec2(d)/float(mu);
+vec3 octahedral_8_decode(uint data) {
+    uvec2 d = uvec2(data, data>>4) & 0xf;
+    vec2 v = vec2(d)/15.0;
     
     v = -1.0 + 2.0*v;
     // Rune Stubbe's version, much faster than original
@@ -89,9 +86,9 @@ vec3 i_octahedral_32( uint data, uint sh) {
 
 VoxelMaterial unpack_voxel(uint32_t voxel) {
   uint32_t albedo_u = voxel & 0xffffff;
-  uint32_t octa_norm = (voxel >> 24) & 0x3f;
-  vec3 norm = i_octahedral_32(octa_norm, 4);
-  vec3 albedo = vec3(float((albedo_u >> 16) & 0xff), float((albedo_u >> 8) & 0xff), float(albedo_u & 0xff)) / 255.0;
+  uint32_t octa_norm = (voxel >> 18) & 0xff;
+  vec3 norm = octahedral_8_decode(octa_norm);
+  vec3 albedo = vec3(float((albedo_u >> 12) & 0x3f), float((albedo_u >> 6) & 0x3f), float(albedo_u & 0x3f)) / 63.0;
   return VoxelMaterial(albedo, norm);
 }
 

@@ -197,7 +197,7 @@ impl VoxelWorld {
         }
 
         if input.is_key_pressed(Key::T) {
-            const NORM_RANGE: i32 = 0;
+            const NORM_RANGE: i32 = 3;
             for x in -NORM_RANGE..=NORM_RANGE {
                 for y in -NORM_RANGE..=NORM_RANGE {
                     for z in -NORM_RANGE..=NORM_RANGE {
@@ -223,24 +223,7 @@ impl VoxelWorld {
                             "Chunk: {:?} Brick: {:?}, morton: {:?}",
                             dyn_pos, brick_center, brick_morton
                         );
-                        let brick_data_index = 1347;
-                        println!("brick_data_index: {:?}", brick_data_index);
-                        let brick_data = vox_world.dyn_world().brick_data().get(brick_data_index);
-                        let brick_pallete = vox_world
-                            .dyn_world()
-                            .brick_palette_list()
-                            .get(brick_data.palette_index(), brick_data.palette_size());
-                        println!(
-                            "palette index: {:?}, size: {:?}, data: {:?}",
-                            brick_data.palette_index(),
-                            brick_data.palette_size(),
-                            brick_pallete
-                        );
                         vox_world.dyn_world_mut().update_chunk_normals(dyn_pos);
-                        println!(
-                            "slice: {:?}",
-                            vox_world.dyn_world().brick_data().get_indices(1347)
-                        );
                     }
                 }
             }
