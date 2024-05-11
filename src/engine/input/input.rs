@@ -163,7 +163,7 @@ impl Input {
             device_id,
             event,
             is_synthetic,
-        } = event
+        } = &event
         {
             if !is_synthetic {
                 if let winit::keyboard::PhysicalKey::Code(winit_key_code) = event.physical_key {
@@ -178,6 +178,25 @@ impl Input {
                                     .submit_input(keyboard::SubmitInput::Released(key));
                             }
                         }
+                    }
+                }
+            }
+        }
+        if let winit::event::WindowEvent::MouseInput {
+            device_id,
+            button,
+            state,
+            ..
+        } = &event
+        {
+            if let Some(button) = mouse::Button::from_winit_button(button) {
+                match state {
+                    winit::event::ElementState::Pressed => {
+                        self.mouse.submit_input(mouse::SubmitInput::Pressed(button));
+                    }
+                    winit::event::ElementState::Released => {
+                        self.mouse
+                            .submit_input(mouse::SubmitInput::Released(button));
                     }
                 }
             }

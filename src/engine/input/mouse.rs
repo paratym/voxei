@@ -78,3 +78,14 @@ pub enum Button {
     Right,
     Middle,
 }
+
+impl Button {
+    pub fn from_winit_button(button: &winit::event::MouseButton) -> Option<Self> {
+        match button {
+            winit::event::MouseButton::Left => Some(Self::Left),
+            winit::event::MouseButton::Right => Some(Self::Right),
+            winit::event::MouseButton::Middle => Some(Self::Middle),
+            _ => None,
+        }
+    }
+}

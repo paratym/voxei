@@ -25,7 +25,7 @@ TraceWorldOut trace_world_out_hit(vec3 color) {
 }
 
 const float EPSILON = 0.000001;
-const vec3 LIGHT_DIR = normalize(vec3(0,-1,-1));
+const vec3 LIGHT_DIR = normalize(vec3(-0.5,-1,1));
 const vec3 LIGHT_POS = vec3(100, 100, 0);
 
 TraceWorldOut trace_brick(Ray ray, uint32_t data_index, vec3 normal, in VoxelWorldInfo info, vec3 brick_world_pos) {

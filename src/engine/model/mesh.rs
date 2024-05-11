@@ -1,4 +1,4 @@
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 
 use crate::engine::geometry::shapes::{aabb::AABB, triangle::Triangle};
 
@@ -9,8 +9,8 @@ pub struct Mesh {
 
 impl Mesh {
     pub fn new(triangles: Vec<Triangle>) -> Self {
-        let mut min = Vector3::new(f32::MAX, f32::MAX, f32::MAX);
-        let mut max = Vector3::new(f32::MIN, f32::MIN, f32::MIN);
+        let mut min = Point3::new(f32::MAX, f32::MAX, f32::MAX);
+        let mut max = Point3::new(f32::MIN, f32::MIN, f32::MIN);
 
         for triangle in &triangles {
             min.x = min
@@ -52,8 +52,8 @@ impl Mesh {
 impl From<&tobj::Model> for Mesh {
     fn from(model: &tobj::Model) -> Self {
         let mut triangles = Vec::new();
-        let mut min = Vector3::new(f32::MAX, f32::MAX, f32::MAX);
-        let mut max = Vector3::new(f32::MIN, f32::MIN, f32::MIN);
+        let mut min = Point3::new(f32::MAX, f32::MAX, f32::MAX);
+        let mut max = Point3::new(f32::MIN, f32::MIN, f32::MIN);
 
         for i in (0..model.mesh.indices.len()).step_by(3) {
             let i0 = model.mesh.indices[i] as usize;
@@ -103,8 +103,8 @@ impl From<&Vec<tobj::Model>> for Mesh {
             .collect::<Vec<Mesh>>();
 
         let mut triangles = Vec::new();
-        let mut min = Vector3::new(f32::MAX, f32::MAX, f32::MAX);
-        let mut max = Vector3::new(f32::MIN, f32::MIN, f32::MIN);
+        let mut min = Point3::new(f32::MAX, f32::MAX, f32::MAX);
+        let mut max = Point3::new(f32::MIN, f32::MIN, f32::MIN);
 
         for mesh in meshes {
             let bbox = mesh.bbox;

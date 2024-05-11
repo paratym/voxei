@@ -1,4 +1,4 @@
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 
 use crate::engine::geometry::shapes::Face;
 
@@ -6,19 +6,19 @@ use super::Shape;
 
 #[derive(Clone, Copy)]
 pub struct AABB {
-    center: Vector3<f32>,
+    center: Point3<f32>,
     half_extents: Vector3<f32>,
 }
 
 impl AABB {
-    pub fn new_center_half_extent(center: Vector3<f32>, half_extents: Vector3<f32>) -> Self {
+    pub fn new_center_half_extent(center: Point3<f32>, half_extents: Vector3<f32>) -> Self {
         Self {
             center,
             half_extents,
         }
     }
 
-    pub fn new_min_max(min: Vector3<f32>, max: Vector3<f32>) -> Self {
+    pub fn new_min_max(min: Point3<f32>, max: Point3<f32>) -> Self {
         let half_extents = (max - min) / 2.0;
         let center = min + half_extents;
         Self {
@@ -36,7 +36,19 @@ impl AABB {
         )
     }
 
-    pub fn center(&self) -> Vector3<f32> {
+    pub fn point_in_aabb(&self, point: Point3<f32>) -> bool {
+        let min = self.min();
+        let max = self.max();
+
+        return point.x >= min.x
+            && point.x <= max.x
+            && point.y >= min.y
+            && point.y <= max.y
+            && point.z >= min.z
+            && point.z <= max.z;
+    }
+
+    pub fn center(&self) -> Point3<f32> {
         self.center
     }
 
@@ -44,11 +56,11 @@ impl AABB {
         self.half_extents
     }
 
-    pub fn min(&self) -> Vector3<f32> {
+    pub fn min(&self) -> Point3<f32> {
         self.center - self.half_extents
     }
 
-    pub fn max(&self) -> Vector3<f32> {
+    pub fn max(&self) -> Point3<f32> {
         self.center + self.half_extents
     }
 }

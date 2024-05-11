@@ -82,6 +82,8 @@ pub trait Shape {
 
 #[cfg(test)]
 mod tests {
+    use nalgebra::Point3;
+
     use super::*;
 
     #[test]
@@ -103,11 +105,11 @@ mod tests {
     #[test]
     fn test_aabb_intersection() {
         let aabb1 = aabb::AABB::new_center_half_extent(
-            Vector3::new(0.0, 0.0, 0.0),
+            Point3::new(0.0, 0.0, 0.0),
             Vector3::new(1.0, 1.0, 1.0),
         );
         let aabb2 = aabb::AABB::new_center_half_extent(
-            Vector3::new(0.5, 0.5, 0.5),
+            Point3::new(0.5, 0.5, 0.5),
             Vector3::new(1.0, 1.0, 1.0),
         );
 
@@ -117,7 +119,7 @@ mod tests {
     #[test]
     fn test_triangle_aabb_intersection() {
         let aabb = aabb::AABB::new_center_half_extent(
-            Vector3::new(0.0, 0.0, 0.0),
+            Point3::new(0.0, 0.0, 0.0),
             Vector3::new(1.0, 1.0, 1.0),
         );
         let t = triangle::Triangle::new(

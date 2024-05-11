@@ -109,7 +109,7 @@ impl DynVoxelWorld {
         }
     }
 
-    fn unload_chunk(&mut self, local_chunk_pos: DynChunkPos) {
+    pub fn unload_chunk(&mut self, local_chunk_pos: DynChunkPos) {
         let morton = local_chunk_pos.morton();
         self.chunk_occupancy_mask
             .set_status(morton, SpatialStatus::Unloaded);

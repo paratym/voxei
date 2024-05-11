@@ -13,7 +13,7 @@ DECL_PUSH_CONSTANTS {
   ResourceId to_process_bricks;
 } push_constants;
 
-const int CHECK_LENGTH = 5;
+const int CHECK_LENGTH = 3;
 const float CHECK_LENGTH_DIST = length(vec3(CHECK_LENGTH, CHECK_LENGTH, CHECK_LENGTH));
 
 // hash from https://www.shadertoy.com/view/WttXWX

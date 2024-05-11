@@ -1,5 +1,6 @@
 use std::{
     collections::{HashMap, HashSet},
+    f32::EPSILON,
     ops::Deref,
     sync::{
         atomic::{AtomicBool, Ordering},
@@ -8,7 +9,7 @@ use std::{
     thread::Thread,
 };
 
-use nalgebra::Vector3;
+use nalgebra::{Point3, Vector3};
 use paya::swapchain::{self, Swapchain};
 use rayon::{spawn, ThreadBuilder};
 use voxei_macros::Resource;
@@ -18,12 +19,18 @@ use crate::{
     engine::{
         common::transform::Transform,
         ecs::ecs_world::ECSWorld,
+        geometry::{ray::Ray, shapes::aabb::AABB},
         graphics::{
-            device::DeviceResource, pass::voxel::VoxelPipeline, swapchain::SwapchainResource,
+            device::DeviceResource,
+            pass::voxel::{self, VoxelPipeline},
+            swapchain::SwapchainResource,
         },
-        input::{keyboard::Key, Input},
+        input::{keyboard::Key, mouse, Input},
         resource::{Res, ResMut},
-        voxel::{dynamic_world::SpatialStatus, vox_constants::BRICK_WORLD_LENGTH},
+        voxel::{
+            dynamic_world::SpatialStatus,
+            vox_constants::{BRICK_LENGTH, BRICK_WORLD_LENGTH},
+        },
     },
     settings::Settings,
 };
@@ -32,7 +39,7 @@ use super::{
     chunk_generator::ChunkGenerator,
     dynamic_world::DynVoxelWorld,
     util::{next_pow2, Morton},
-    vox_constants::{CHUNK_LENGTH, CHUNK_WORLD_LENGTH},
+    vox_constants::{CHUNK_LENGTH, CHUNK_VOXEL_LENGTH, CHUNK_WORLD_LENGTH},
 };
 
 #[derive(Resource)]
@@ -228,6 +235,132 @@ impl VoxelWorld {
                 }
             }
         }
+
+        if let Some(chunk_pos) = vox_world.raycast_world(transform.into()) {
+            if input.is_mouse_button_pressed(mouse::Button::Left) {
+                println!("Raycast hit chunk: {:?}", chunk_pos);
+                vox_world.dyn_world_mut().unload_chunk(chunk_pos);
+            }
+        }
+    }
+
+    // Returns the intersected chunk, brick, and local voxel morton.
+    pub fn raycast_world(&self, ray: Ray) -> Option<(DynChunkPos)> {
+        let dyn_world_side_length =
+            self.chunk_render_distance.pow2_side_length() as f32 * CHUNK_WORLD_LENGTH as f32;
+        let dyn_world_half_side_length = dyn_world_side_length / 2.0;
+        let dyn_world_aabb = AABB::new_center_half_extent(
+            (self.chunk_center().vector.map(|x| x as f32) * CHUNK_WORLD_LENGTH).into(),
+            Vector3::new(
+                dyn_world_side_length,
+                dyn_world_side_length,
+                dyn_world_side_length,
+            ),
+        );
+
+        let Some(initial_t) = ray.intersect_aabb(&dyn_world_aabb) else {
+            return None;
+        };
+        const EPSILON: f32 = 0.000001;
+        // TODO: abstract this dda somehow or like clean it up cause this is atrocious
+        let initial_pos = ray.traverse(initial_t);
+        let normalized_initial_pos = (initial_pos
+            - self
+                .chunk_center()
+                .vector
+                .map(|x| x as f32 * CHUNK_WORLD_LENGTH))
+        .coords
+        .add_scalar(dyn_world_half_side_length)
+        .map(|x| x / dyn_world_side_length);
+        let dyn_initial_pos = normalized_initial_pos
+            .map(|x| x * self.chunk_render_distance.pow2_side_length() as f32);
+        let step_axes = ray.direction().map(|x| x.signum() as i32);
+        let t_unit_delta = ray.inv_direction().abs();
+        let mut c_map_pos = dyn_initial_pos.map(|x| x.floor() as i32);
+        let mut c_curr_t_axes = (ray
+            .direction_sign()
+            .component_mul(&(c_map_pos.map(|x| x as f32) - dyn_initial_pos))
+            + (ray.direction_sign() * 0.5).add_scalar(0.5))
+        .component_mul(&t_unit_delta);
+        let mut c_last_t = 0.0;
+
+        while c_map_pos.x >= 0
+            && c_map_pos.y >= 0
+            && c_map_pos.z >= 0
+            && c_map_pos.x < self.chunk_render_distance.pow2_side_length() as i32
+            && c_map_pos.y < self.chunk_render_distance.pow2_side_length() as i32
+            && c_map_pos.z < self.chunk_render_distance.pow2_side_length() as i32
+        {
+            let dyn_chunk_pos = (c_map_pos.map(|x| x as u32)
+                + self.dyn_world().chunk_translation())
+            .map(|x| x.rem_euclid(self.chunk_render_distance.pow2_side_length()));
+            let dyn_chunk_pos = DynChunkPos::new(dyn_chunk_pos.x, dyn_chunk_pos.y, dyn_chunk_pos.z);
+            let chunk_status = self.dyn_world().chunk_status(dyn_chunk_pos);
+            if chunk_status == SpatialStatus::Loaded {
+                let c_enter_pos = ray.traverse(c_last_t);
+                let b_initial_pos = (c_enter_pos - c_map_pos.map(|x| x as f32))
+                    .map(|x| x.clamp(EPSILON, 1.0 - EPSILON) * CHUNK_LENGTH as f32);
+                let mut b_map_pos = b_initial_pos.map(|x| x.floor() as i32);
+                let mut b_curr_t_axes = (ray
+                    .direction_sign()
+                    .component_mul(&(b_map_pos.map(|x| x as f32) - b_initial_pos))
+                    + (ray.direction_sign() * 0.5).add_scalar(0.5))
+                .component_mul(&t_unit_delta);
+                let mut b_last_t = 0.0;
+
+                while b_map_pos.x >= 0
+                    && b_map_pos.y >= 0
+                    && b_map_pos.z >= 0
+                    && b_map_pos.x < BRICK_LENGTH as i32
+                    && b_map_pos.y < BRICK_LENGTH as i32
+                    && b_map_pos.z < BRICK_LENGTH as i32
+                {
+                    let dyn_brick_pos = DynBrickPos::new(
+                        dyn_chunk_pos.vector.x * CHUNK_LENGTH as u32 + b_map_pos.x as u32,
+                        dyn_chunk_pos.vector.y * CHUNK_LENGTH as u32 + b_map_pos.y as u32,
+                        dyn_chunk_pos.vector.z * CHUNK_LENGTH as u32 + b_map_pos.z as u32,
+                    );
+                    let brick_index = self.dyn_world().brick_indices_grid().as_slice()
+                        [*dyn_brick_pos.morton() as usize];
+                    if brick_index.status() == SpatialStatus::Loaded {
+                        let c_enter_pos = ray.traverse(b_last_t);
+                        let v_initial_pos = (c_enter_pos - b_map_pos.map(|x| x as f32))
+                            .map(|x| x.clamp(EPSILON, 1.0 - EPSILON) * BRICK_LENGTH as f32);
+                        let v_map_pos = v_initial_pos.map(|x| x.floor() as u32);
+
+                        return Some(dyn_chunk_pos);
+                    }
+
+                    let advance_mask = b_curr_t_axes.zip_zip_map(
+                        &b_curr_t_axes.yzx(),
+                        &b_curr_t_axes.zxy(),
+                        |a, b, c| {
+                            if a <= b.min(c) {
+                                1.0
+                            } else {
+                                0.0
+                            }
+                        },
+                    );
+                    b_last_t = b_curr_t_axes.min();
+                    b_curr_t_axes += t_unit_delta.component_mul(&advance_mask);
+                    b_map_pos += step_axes.component_mul(&advance_mask.map(|x| x as i32));
+                }
+            }
+
+            let advance_mask =
+                c_curr_t_axes.zip_zip_map(&c_curr_t_axes.yzx(), &c_curr_t_axes.zxy(), |a, b, c| {
+                    if a <= b.min(c) {
+                        1.0
+                    } else {
+                        0.0
+                    }
+                });
+            c_last_t = c_curr_t_axes.min();
+            c_curr_t_axes += t_unit_delta.component_mul(&advance_mask);
+            c_map_pos += step_axes.component_mul(&advance_mask.map(|x| x as i32));
+        }
+        return None;
     }
 
     pub fn dyn_world(&self) -> &DynVoxelWorld {
@@ -351,5 +484,25 @@ impl DynBrickPos {
 
     pub fn morton(&self) -> Morton {
         Morton::encode(self.vector)
+    }
+}
+
+pub struct WorldVoxelPos {
+    pub vector: Vector3<u32>,
+}
+
+impl WorldVoxelPos {
+    pub fn new(x: u32, y: u32, z: u32) -> Self {
+        Self {
+            vector: Vector3::new(x, y, z),
+        }
+    }
+
+    pub fn world_chunk_pos(&self) -> WorldChunkPos {
+        WorldChunkPos::new(
+            (self.vector.x / CHUNK_VOXEL_LENGTH as u32) as i32,
+            (self.vector.y / CHUNK_VOXEL_LENGTH as u32) as i32,
+            (self.vector.z / CHUNK_VOXEL_LENGTH as u32) as i32,
+        )
     }
 }
